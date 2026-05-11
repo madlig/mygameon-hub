@@ -14,13 +14,11 @@ async function getDashboardStats() {
   try {
     const { sheets } = await getGoogleClients()
 
-    // Ambil log General Games
     const generalRes = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GSHEET_ID,
       range: 'Sheet1!A:D',
     })
 
-    // Ambil log Sims 4
     const sims4Res = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GSHEET_SIMS4_ID,
       range: 'Licenses!A:G',
@@ -33,23 +31,35 @@ async function getDashboardStats() {
       row => row[0] && row[0] !== 'Invoice'
     )
 
-    // Hitung order hari ini (General)
     const today = new Date().toDateString()
-    const todayOrders = generalRows.filter(
-      row => new Date(row[0]).toDateString() === today
-    ).length
 
-    // Hitung game dikirim hari ini
+    // Game dikirim hari ini — hitung semua baris hari ini
     const todayGames = generalRows.filter(
       row => new Date(row[0]).toDateString() === today
     ).length
+
+    // Order hari ini — hitung unique kombinasi email + timestamp menit
+    // Baris dengan email sama dalam waktu berdekatan = 1 order
+    const todayRows = generalRows.filter(
+      row => new Date(row[0]).toDateString() === today
+    )
+
+    const uniqueOrders = new Set(
+      todayRows.map(row => {
+        const email = row[1] || ''
+        // Bulatkan ke menit — transaksi dalam 1 menit = 1 order
+        const minute = new Date(row[0]).toISOString().slice(0, 16)
+        return `${email}_${minute}`
+      })
+    )
+    const todayOrders = uniqueOrders.size
 
     // Total lisensi Sims 4 aktif
     const activeLicenses = sims4Rows.filter(
       row => row[4] === 'Active'
     ).length
 
-    // Recent logs — gabung dan ambil 3 terbaru
+    // Recent logs
     const generalLogs = generalRows.map(row => ({
       type: 'general',
       email: row[1] || '',
@@ -69,21 +79,11 @@ async function getDashboardStats() {
       .sort((a, b) => new Date(b.time) - new Date(a.time))
       .slice(0, 3)
 
-    return {
-      todayOrders,
-      todayGames,
-      activeLicenses,
-      recentLogs,
-    }
+    return { todayOrders, todayGames, activeLicenses, recentLogs }
 
   } catch (e) {
     console.error('Dashboard stats error:', e)
-    return {
-      todayOrders: 0,
-      todayGames: 0,
-      activeLicenses: 0,
-      recentLogs: [],
-    }
+    return { todayOrders: 0, todayGames: 0, activeLicenses: 0, recentLogs: [] }
   }
 }
 
