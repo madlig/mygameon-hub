@@ -13,10 +13,11 @@ export async function POST(request) {
     const folderId = process.env.GDRIVE_FOLDER_ID
     const sheetId = process.env.GSHEET_ID
     const report = []
+    const successItems = [] // simpan item + realId yang sudah dishare
 
     for (const item of cart) {
       try {
-        // Cari semua file dengan nama EXACT untuk MASTER-BACKUP random selection
+        // Cari semua file dengan nama EXACT
         const q = `'${folderId}' in parents and name = '${item.name.replace(/'/g, "\\'")}' and trashed = false`
         const searchRes = await drive.files.list({
           q,
@@ -32,16 +33,16 @@ export async function POST(request) {
           continue
         }
 
-        // Random pick dari file yang namanya exact match (MASTER-BACKUP)
+        // Random pick untuk MASTER-BACKUP selection
         const picked = matches[Math.floor(Math.random() * matches.length)]
 
-        // Resolve shortcut ke file asli
+        // Resolve shortcut ke file asli — ini yang dipakai untuk share DAN link email
         let realId = picked.id
         if (picked.mimeType === 'application/vnd.google-apps.shortcut' && picked.shortcutDetails) {
           realId = picked.shortcutDetails.targetId
         }
 
-        // Share akses (reader only, tanpa notifikasi Google)
+        // Share akses ke realId
         await drive.permissions.create({
           fileId: realId,
           supportsAllDrives: true,
@@ -55,7 +56,6 @@ export async function POST(request) {
 
         // Log ke Spreadsheet
         try {
-          // Ambil info owner file asli
           let ownerEmail = 'Unknown'
           try {
             const fileInfo = await drive.files.get({
@@ -82,6 +82,8 @@ export async function POST(request) {
           console.error('Log error:', e.message)
         }
 
+        // Simpan realId yang sudah dishare untuk dipakai di email
+        successItems.push({ name: item.name, realId })
         report.push({ name: item.name, status: 'success' })
 
       } catch (e) {
@@ -89,11 +91,10 @@ export async function POST(request) {
       }
     }
 
-    // Kirim email HTML ke pembeli
-    const successItems = report.filter(r => r.status === 'success')
+    // Kirim email dengan realId yang sama persis dengan yang dishare
     if (successItems.length > 0) {
       try {
-        await sendPurchaseEmail(gmail, email, successItems, cart, drive, folderId)
+        await sendPurchaseEmail(gmail, email, successItems)
       } catch (e) {
         console.error('Email error:', e.message)
       }
@@ -110,26 +111,12 @@ export async function POST(request) {
   }
 }
 
-async function sendPurchaseEmail(gmail, toEmail, successItems, cart, drive, folderId) {
-  // Bangun daftar link untuk email
+// Terima successItems yang sudah berisi realId — tidak perlu cari ulang
+async function sendPurchaseEmail(gmail, toEmail, successItems) {
   let emailList = ''
   for (const item of successItems) {
-    // Cari file lagi untuk dapat realId (untuk link)
-    const q = `'${folderId}' in parents and name = '${item.name.replace(/'/g, "\\'")}' and trashed = false`
-    const res = await drive.files.list({
-      q,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      pageSize: 1,
-      fields: 'files(id, mimeType, shortcutDetails)',
-    })
-    const f = res.data.files?.[0]
-    let linkId = f?.id || ''
-    if (f?.mimeType === 'application/vnd.google-apps.shortcut' && f?.shortcutDetails) {
-      linkId = f.shortcutDetails.targetId
-    }
-
-    emailList += `<b>🎮 ${item.name}</b><br>Link: <a href="https://drive.google.com/open?id=${linkId}">Klik Disini untuk Download</a><br><br>`
+    // Gunakan realId yang sama dengan yang dipakai untuk share permission
+    emailList += `<b>🎮 ${item.name}</b><br>Link: <a href="https://drive.google.com/open?id=${item.realId}">Klik Disini untuk Download</a><br><br>`
   }
 
   const subject = '✅ Orderan MyGameON: Akses Game Siap!'
@@ -143,16 +130,16 @@ async function sendPurchaseEmail(gmail, toEmail, successItems, cart, drive, fold
       <hr>
       <h3>⚠️ PENTING: Langkah Selanjutnya</h3>
       <ol>
-        <li style="margin-bottom:10px;">Download <b>SEMUA PART</b> secara <b>SATU PER SATU</b> (Bergantian).</li>
+        <li style="margin-bottom:10px;">Download <b>SEMUA PART</b> secara <b>SATU PER SATU</b> (Bergantian).<br>
+        <i style="color:#d35400;">Jangan download semua file sekaligus! Tunggu part 1 selesai, baru download part 2.</i></li>
         <li style="margin-bottom:10px;"><b>PENTING SOAL ANTIVIRUS:</b> Buat <b>Folder Exclusion</b> agar file aman.</li>
         <li>Wajib tonton <b>VIDEO TUTORIAL</b> agar 100% Work.</li>
       </ol>
       <br>
-      <p style="font-size:12px;color:#777;"><i>Email ini dikirim otomatis oleh sistem MyGameON.</i></p>
+      <p style="font-size:12px;color:#777;"><i>Email ini dikirim otomatis oleh sistem MyGameON. Harap simpan email ini sebagai bukti pembelian.</i></p>
     </div>
   `
 
-  // Gmail API membutuhkan email dalam format RFC 2822 yang di-encode base64
   const rawMessage = [
     `To: ${toEmail}`,
     `Subject: ${subject}`,
@@ -169,8 +156,6 @@ async function sendPurchaseEmail(gmail, toEmail, successItems, cart, drive, fold
 
   await gmail.users.messages.send({
     userId: 'me',
-    requestBody: {
-      raw: encodedMessage,
-    },
+    requestBody: { raw: encodedMessage },
   })
 }
