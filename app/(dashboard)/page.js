@@ -1,5 +1,3 @@
-'use client'
-
 export const dynamic = 'force-dynamic'
 
 import TopBar from '@/components/layout/TopBar'
@@ -37,8 +35,12 @@ async function getDashboardStats() {
 
     const generalRows = (generalRes.data.values || []).filter(row => row[0] && row[0] !== 'Date')
     const sims4Rows = (sims4Res.data.values || []).filter(row => row[0] && row[0] !== 'Invoice')
-    const today = new Date().toDateString()
-    const todayRows = generalRows.filter(row => new Date(parseSheetDate(row[0])).toDateString() === today)
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+    const todayRows = generalRows.filter(row => {
+      const t = parseSheetDate(row[0])
+      if (!t) return false
+      return new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) === today
+    })
     const todayGames = todayRows.length
     const uniqueOrders = new Set(todayRows.map(row => `${row[1] || ''}_${parseSheetDate(row[0]).slice(0, 16)}`))
     const todayOrders = uniqueOrders.size
