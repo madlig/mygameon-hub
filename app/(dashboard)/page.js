@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import TopBar from '@/components/layout/TopBar'
 import StatCard from '@/components/shared/StatCard'
 import { AppBadge, AppCard, SectionLabel } from '@/components/shared/design-system'
