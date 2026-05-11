@@ -43,7 +43,7 @@ export async function POST(request) {
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: 'Licenses!A:G',
-      valueInputOption: 'USER_ENTERED',
+      valueInputOption: 'RAW',
       requestBody: {
         values: [[invoice, '', '', ccVal, 'Active', email, new Date().toISOString()]],
       },

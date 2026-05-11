@@ -17,6 +17,10 @@ async function getAdminClients() {
 }
 
 export async function GET(request) {
+  const secret = request.headers.get('authorization')
+  if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   // Verifikasi request dari Vercel Cron
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {

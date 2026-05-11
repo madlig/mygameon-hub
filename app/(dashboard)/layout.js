@@ -3,10 +3,10 @@ import BottomNav from '@/components/layout/BottomNav'
 
 export default function DashboardLayout({ children }) {
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <main className="flex-1 overflow-y-auto p-5 pb-24 md:pb-5">
+        <main className="fadeUp flex-1 overflow-y-auto p-[var(--pad-card)] pb-28 md:pb-[var(--pad-card)]">
           {children}
         </main>
       </div>

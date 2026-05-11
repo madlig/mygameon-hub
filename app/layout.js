@@ -39,7 +39,11 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} min-h-full flex flex-col`}>
+      <body
+        data-density="comfortable"
+        data-sb="expanded"
+        className={`${geistSans.variable} ${geistMono.variable} min-h-full flex flex-col`}
+      >
         <SessionWrapper>
           <ServiceWorkerRegister />
           {children}

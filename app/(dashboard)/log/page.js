@@ -17,16 +17,25 @@ export default function LogPage() {
   const [page, setPage]       = useState(1)
   const [filter, setFilter]   = useState('all')
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   async function fetchLogs(f = filter, p = page) {
     setIsLoading(true)
     try {
       const res = await fetch(`/api/log?filter=${f}&page=${p}`)
+      if (!res.ok) {
+        const data = await res.json()
+        setError(data.error || `Error ${res.status}`)
+        setLogs([])
+        return
+      }
       const data = await res.json()
+      setError(null)
       setLogs(data.logs || [])
       setTotal(data.total || 0)
     } catch (e) {
-      console.error(e)
+      setError('Gagal terhubung ke server')
+      setLogs([])
     } finally {
       setIsLoading(false)
     }
@@ -43,16 +52,14 @@ export default function LogPage() {
 
   function formatTime(timeStr) {
     if (!timeStr) return '-'
-    try {
-      return new Date(timeStr).toLocaleString('id-ID', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } catch {
-      return timeStr
-    }
+    const d = new Date(timeStr)
+    if (isNaN(d.getTime())) return timeStr
+    return d.toLocaleString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }
 
   return (
@@ -81,6 +88,13 @@ export default function LogPage() {
         {total} entri
       </p>
 
+      {/* Error */}
+      {error && !isLoading && (
+        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+          Gagal memuat log: {error}
+        </div>
+      )}
+
       {/* Loading */}
       {isLoading && (
         <div className="flex justify-center py-12">
@@ -101,7 +115,7 @@ export default function LogPage() {
                 <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{log.product}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   {formatTime(log.time)}
-                  {log.source && ` · ${log.source}`}
+                  {log.type === 'sims4' && log.source && ` · #${log.source}`}
                 </p>
               </div>
               <div className="flex flex-col items-end gap-1.5 flex-shrink-0">

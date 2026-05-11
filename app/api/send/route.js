@@ -71,7 +71,7 @@ export async function POST(request) {
           await sheets.spreadsheets.values.append({
             spreadsheetId: sheetId,
             range: 'Sheet1!A:D',
-            valueInputOption: 'USER_ENTERED',
+            valueInputOption: 'RAW',
             requestBody: {
               values: [[new Date().toISOString(), email, item.name, ownerEmail]],
             },
@@ -86,7 +86,7 @@ export async function POST(request) {
             await sheets.spreadsheets.values.append({
               spreadsheetId: sheetId,
               range: 'ExpiringAccess!A:F',
-              valueInputOption: 'USER_ENTERED',
+              valueInputOption: 'RAW',
               requestBody: {
                 values: [[
                   email,

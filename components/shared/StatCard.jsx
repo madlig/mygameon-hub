@@ -1,10 +1,20 @@
-export default function StatCard({ label, value, sub, subColor = 'text-muted-foreground' }) {
+export default function StatCard({ label, value, sub, subColor = 'text-[var(--text-3)]', icon: Icon, accent }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs text-muted-foreground mb-1.5">{label}</p>
-      <p className="text-2xl font-semibold text-foreground leading-none">{value}</p>
+    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[var(--pad-card)]">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[11px] text-[var(--text-2)]">{label}</p>
+        {Icon && (
+          <span
+            className="flex h-6 w-6 items-center justify-center rounded-md"
+            style={{ background: accent ? `${accent}20` : 'var(--elevated)', color: accent || 'var(--text-2)' }}
+          >
+            <Icon size={13} />
+          </span>
+        )}
+      </div>
+      <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight text-[var(--text)]">{value}</p>
       {sub && (
-        <p className={`text-xs mt-1.5 ${subColor}`}>{sub}</p>
+        <p className={`mt-2 text-[10.5px] ${subColor}`}>{sub}</p>
       )}
     </div>
   )

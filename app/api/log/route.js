@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
+import { parseSheetDate } from '@/lib/utils'
 
 export async function GET(request) {
   try {
@@ -14,19 +15,21 @@ export async function GET(request) {
     const generalRes = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GSHEET_ID,
       range: 'Sheet1!A:D',
+      valueRenderOption: 'UNFORMATTED_VALUE',
     })
 
     // Ambil log Sims 4
     const sims4Res = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GSHEET_SIMS4_ID,
-      range: 'Sheet1!A:G',
+      range: 'Licenses!A:G',
+      valueRenderOption: 'UNFORMATTED_VALUE',
     })
 
     const generalRows = (generalRes.data.values || [])
       .filter(row => row[0] && row[0] !== 'Date')
       .map(row => ({
         type: 'general',
-        time: row[0] || '',
+        time: parseSheetDate(row[0]),
         email: row[1] || '',
         product: row[2] || '',
         source: row[3] || '',
@@ -37,7 +40,7 @@ export async function GET(request) {
       .filter(row => row[0] && row[0] !== 'Invoice')
       .map(row => ({
         type: 'sims4',
-        time: row[6] || '',
+        time: parseSheetDate(row[6]),
         email: row[5] || '',
         product: `Sims 4 · ${row[3] === 'Y' ? 'Premium CC' : 'Standard'}`,
         source: row[0] || '', // invoice number
@@ -46,7 +49,9 @@ export async function GET(request) {
 
     // Gabung dan sort berdasarkan waktu (terbaru dulu)
     let combined = [...generalRows, ...sims4Rows].sort((a, b) => {
-      return new Date(b.time) - new Date(a.time)
+      const ta = new Date(a.time).getTime() || 0
+      const tb = new Date(b.time).getTime() || 0
+      return tb - ta
     })
 
     // Filter

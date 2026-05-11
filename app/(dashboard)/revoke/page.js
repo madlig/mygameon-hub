@@ -140,7 +140,7 @@ export default function RevokePage() {
           </div>
 
           {/* Revoke all bar */}
-          <div className="fixed bottom-20 left-4 right-4 z-40 md:bottom-4 md:left-64 md:right-4">
+          <div className="fixed bottom-20 left-4 right-4 z-40 md:bottom-4 md:left-[var(--sb-w)] md:right-4">
             <div className="flex items-center justify-between rounded-xl border border-destructive bg-destructive/10 px-4 py-3">
               <p className="text-sm text-destructive font-medium">
                 Cabut semua {accessList.length} akses
