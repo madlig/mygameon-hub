@@ -44,6 +44,11 @@ async function getDashboardStats() {
     const todayGames = todayRows.length
     const uniqueOrders = new Set(todayRows.map(row => `${row[1] || ''}_${parseSheetDate(row[0]).slice(0, 16)}`))
     const todayOrders = uniqueOrders.size
+    const todaySims4Rows = sims4Rows.filter(row => {
+      const t = parseSheetDate(row[6])
+      if (!t) return false
+      return new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' }) === today
+    })
     const activeLicenses = sims4Rows.filter(row => row[4] === 'Active').length
 
     const generalLogs = generalRows.map(row => ({
@@ -65,7 +70,7 @@ async function getDashboardStats() {
       .sort((a, b) => new Date(b.time) - new Date(a.time))
       .slice(0, 3)
 
-    return { todayOrders, todayGames, activeLicenses, recentLogs }
+    return { todayOrders: todayOrders + todaySims4Rows.length, todayGames: todayGames + todaySims4Rows.length, activeLicenses, recentLogs }
   } catch (e) {
     console.error('Dashboard stats error:', e)
     return { todayOrders: 0, todayGames: 0, activeLicenses: 0, recentLogs: [] }

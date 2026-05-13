@@ -60,8 +60,8 @@ export async function POST(request) {
           <p style="color:#fff;margin:5px 0 0;font-size:12px;">The Sims 4 Ultimate Installer</p>
         </div>
         <div style="padding:30px;background:#fff;">
-          <h2 style="color:#333;margin-top:0;">Halo Kak! 👋</h2>
-          <p style="color:#555;">Terima kasih sudah berbelanja di MyGameON. Pesanan kakak sudah kami proses.</p>
+          <h2 style="color:#333;margin-top:0;">Halo, Kak! 👋</h2>
+          <p style="color:#555;">Terima kasih sudah berbelanja di MyGameON. Akses The Sims 4 kamu sudah siap dan bisa langsung digunakan.</p>
           <div style="background:#fff9db;border-left:5px solid #FFD700;padding:15px;margin:25px 0;border-radius:4px;">
             <table style="width:100%;">
               <tr><td style="font-weight:bold;color:#555;padding-bottom:5px;">🧾 Password Extract:</td><td style="font-weight:bold;">mygameonlauncher</td></tr>
@@ -69,18 +69,24 @@ export async function POST(request) {
               <tr><td style="font-weight:bold;color:#555;">📦 Tipe Paket:</td><td style="font-weight:bold;">${variantName}</td></tr>
             </table>
           </div>
-          <div style="text-align:center;margin:35px 0;">
+          <div style="text-align:center;margin:30px 0 15px;">
             <a href="${driveLink}" style="background:#FFD700;color:#000;padding:16px 30px;text-decoration:none;font-weight:bold;border-radius:50px;display:inline-block;">
-              📂 BUKA FOLDER GAME
+              📂 Buka Folder Game
             </a>
           </div>
+          <div style="text-align:center;margin:15px 0 30px;">
+            <a href="https://bit.ly/vidtutorekstrakdownload" style="background:#333;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;border-radius:50px;display:inline-block;font-size:14px;">
+              🎬 Tonton Video Tutorial
+            </a>
+          </div>
+          <p style="font-size:11px;color:#aaa;text-align:center;margin-top:20px;">Email ini dikirim otomatis oleh sistem MyGameON.</p>
         </div>
       </div>
     `
 
     const rawMessage = [
       `To: ${email}`,
-      `Subject: 🎮 Akses The Sims 4 Siap! - Pesanan #${invoice}`,
+      `Subject: MyGameON | Pengiriman Akses Download The Sims 4`,
       'Content-Type: text/html; charset=utf-8',
       '',
       htmlBody,

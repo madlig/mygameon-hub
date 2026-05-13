@@ -134,33 +134,46 @@ async function sendPurchaseEmail(gmail, toEmail, successItems) {
   let emailList = ''
   for (const item of successItems) {
     const expiryNote = item.expirationTime
-      ? `<br><i style="color:#e67e22;">⏱ Akses berlaku hingga: ${new Date(item.expirationTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</i>`
+      ? `<p style="margin:6px 0 0;font-size:12px;color:#e67e22;">⏱ Akses berlaku hingga: ${new Date(item.expirationTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>`
       : ''
-
     emailList += `
-      <b>🎮 ${item.name}</b><br>
-      Link: <a href="https://drive.google.com/open?id=${item.realId}">Klik Disini untuk Download</a>
-      ${expiryNote}<br><br>
+      <div style="padding:12px 0;border-bottom:1px solid #f0f0f0;">
+        <p style="margin:0;font-weight:bold;color:#111;">🎮 ${item.name}</p>
+        <p style="margin:6px 0 0;"><a href="https://drive.google.com/open?id=${item.realId}" style="color:#2563eb;text-decoration:none;font-weight:bold;">Klik di sini untuk Download →</a></p>
+        ${expiryNote}
+      </div>
     `
   }
 
-  const subject = '✅ Orderan MyGameON: Akses Game Siap!'
+  const subject = successItems.length === 1
+    ? `MyGameON | Pengiriman Akses Download ${successItems[0].name}`
+    : `MyGameON | Pengiriman Akses Download Game Pesananmu`
+
   const htmlBody = `
-    <div style="font-family:Arial,sans-serif;color:#333;max-width:600px;border:1px solid #ddd;padding:20px;border-radius:10px;">
-      <h2 style="color:#2E86C1;">Terima Kasih sudah Order di MyGameON!</h2>
-      <p>Halo Kak,</p>
-      <p>Pesanan game kakak sudah kami proses. Berikut adalah akses Google Drive khusus untuk kakak:</p>
-      <hr>
-      ${emailList}
-      <hr>
-      <h3>⚠️ PENTING: Langkah Selanjutnya</h3>
-      <ol>
-        <li style="margin-bottom:10px;">Download <b>SEMUA PART</b> secara <b>SATU PER SATU</b> (Bergantian).<br>
-        <i style="color:#d35400;">Jangan download semua file sekaligus!</i></li>
-        <li style="margin-bottom:10px;"><b>PENTING SOAL ANTIVIRUS:</b> Buat <b>Folder Exclusion</b> agar file aman.</li>
-        <li>Wajib tonton <b>VIDEO TUTORIAL</b> agar 100% Work.</li>
-      </ol>
-      <p style="font-size:12px;color:#777;"><i>Email ini dikirim otomatis oleh sistem MyGameON.</i></p>
+    <div style="font-family:'Segoe UI',Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden;">
+      <div style="background:#111;padding:20px;text-align:center;">
+        <h1 style="color:#fff;margin:0;font-size:20px;letter-spacing:1px;">MYGAMEON</h1>
+        <p style="color:#aaa;margin:4px 0 0;font-size:12px;">Game Digital Store</p>
+      </div>
+      <div style="padding:30px;background:#fff;">
+        <h2 style="color:#111;margin-top:0;">Halo, Kak! 👋</h2>
+        <p style="color:#555;">Terima kasih sudah berbelanja di MyGameON. Pesanan kamu sudah kami proses dan akses Google Drive sudah siap.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+        ${emailList}
+        <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
+        <h3 style="color:#111;margin-bottom:12px;">Langkah Selanjutnya</h3>
+        <ol style="color:#555;line-height:1.8;padding-left:20px;">
+          <li>Download file <b>satu per satu</b> — jangan sekaligus agar tidak error.</li>
+          <li>Tambahkan folder ke <b>Exclusion Antivirus</b> sebelum ekstrak file.</li>
+          <li>Tonton video tutorial di bawah agar proses instalasi berjalan lancar.</li>
+        </ol>
+        <div style="text-align:center;margin:25px 0;">
+          <a href="https://bit.ly/vidtutorekstrakdownload" style="background:#111;color:#fff;padding:12px 28px;text-decoration:none;font-weight:bold;border-radius:6px;display:inline-block;font-size:14px;">
+            🎬 Tonton Video Tutorial
+          </a>
+        </div>
+        <p style="font-size:11px;color:#aaa;text-align:center;margin-top:20px;">Email ini dikirim otomatis oleh sistem MyGameON.</p>
+      </div>
     </div>
   `
 
