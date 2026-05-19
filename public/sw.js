@@ -40,8 +40,9 @@ self.addEventListener('fetch', (event) => {
         return response
       })
       .catch(() => {
-        // Fallback ke cache kalau offline
-        return caches.match(event.request)
+        return caches.match(event.request).then((cached) => {
+          return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
+        })
       })
   )
 })

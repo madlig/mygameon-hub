@@ -1,6 +1,7 @@
 'use client'
 
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, LogOut } from 'lucide-react'
+import { signOut } from 'next-auth/react'
 import Link from 'next/link'
 
 export default function TopBar({ title, backHref }) {
@@ -21,13 +22,22 @@ export default function TopBar({ title, backHref }) {
         )}
         <h1 className="truncate text-sm font-semibold text-[var(--text)]">{title}</h1>
       </div>
-      <div className="hidden md:flex items-center gap-3">
-        <span className="text-[11px] text-[var(--text-3)]">{today}</span>
-        <span className="h-3.5 w-px bg-[var(--border-soft)]" />
-        <div className="flex items-center gap-1.5">
-          <span className="ringGlow h-2 w-2 rounded-full bg-[#22C55E]" />
-          <span className="text-[11px] font-medium text-[#4ade80]">Drive terhubung</span>
+      <div className="flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-3">
+          <span className="text-[11px] text-[var(--text-3)]">{today}</span>
+          <span className="h-3.5 w-px bg-[var(--border-soft)]" />
+          <div className="flex items-center gap-1.5">
+            <span className="ringGlow h-2 w-2 rounded-full bg-[#22C55E]" />
+            <span className="text-[11px] font-medium text-[#4ade80]">Drive terhubung</span>
+          </div>
         </div>
+        <button
+          onClick={() => signOut({ callbackUrl: '/login' })}
+          className="text-[var(--text-3)] hover:text-[var(--text)] md:hidden"
+          title="Logout"
+        >
+          <LogOut size={16} />
+        </button>
       </div>
     </header>
   )

@@ -16,7 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: 'MyGameON Hub',
   description: 'Admin panel MyGameON',
-  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
