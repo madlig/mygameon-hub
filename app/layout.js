@@ -1,11 +1,18 @@
-import { Geist, Geist_Mono } from "next/font/google"
+import { Plus_Jakarta_Sans, Bricolage_Grotesque, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import SessionWrapper from "@/components/SessionWrapper"
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+})
+
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
 })
 
 const geistMono = Geist_Mono({
@@ -15,7 +22,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: 'MyGameON Hub',
-  description: 'Admin panel MyGameON',
+  description: 'Admin panel MyGameON — kelola pengiriman game',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
@@ -24,15 +31,14 @@ export const metadata = {
 }
 
 export const viewport = {
-  themeColor: '#1C1917',
+  themeColor: '#0a0b0f',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 }
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="id" className="dark">
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -41,7 +47,7 @@ export default function RootLayout({ children }) {
       <body
         data-density="comfortable"
         data-sb="expanded"
-        className={`${geistSans.variable} ${geistMono.variable} min-h-full flex flex-col`}
+        className={`${jakarta.variable} ${bricolage.variable} ${geistMono.variable} min-h-full flex flex-col`}
       >
         <SessionWrapper>
           <ServiceWorkerRegister />

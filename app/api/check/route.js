@@ -1,80 +1,115 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
 
+const FOLDER_MIME = 'application/vnd.google-apps.folder'
+const FILE_LIST_CAP = 300 // batas nama file per folder yang dikirim ke client
+
+function fmtSize(bytes) {
+  if (!bytes) return '0 MB'
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(2)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
+
+// Semua file non-folder di dalam parent (paginated, akurat untuk >1000 file)
+async function listFiles(drive, parentId) {
+  const files = []
+  let pageToken
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType != '${FOLDER_MIME}' and trashed = false`,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      pageSize: 1000,
+      pageToken,
+      fields: 'nextPageToken, files(name, size)',
+    })
+    for (const f of res.data.files || []) {
+      files.push({ name: f.name, bytes: f.size ? parseInt(f.size) : 0 })
+    }
+    pageToken = res.data.nextPageToken
+  } while (pageToken)
+  return files
+}
+
+async function listFolders(drive, parentId) {
+  const folders = []
+  let pageToken
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      pageSize: 1000,
+      pageToken,
+      fields: 'nextPageToken, files(id, name)',
+    })
+    for (const f of res.data.files || []) folders.push({ id: f.id, name: f.name })
+    pageToken = res.data.nextPageToken
+  } while (pageToken)
+  return folders
+}
+
+function pack(files) {
+  const bytes = files.reduce((s, f) => s + f.bytes, 0)
+  const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  return {
+    count: files.length,
+    bytes,
+    size: fmtSize(bytes),
+    files: sorted.slice(0, FILE_LIST_CAP).map(f => ({ name: f.name, size: fmtSize(f.bytes) })),
+  }
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const fileId = searchParams.get('id')
-
     if (!fileId) {
       return NextResponse.json({ error: 'File ID wajib diisi' }, { status: 400 })
     }
 
     const { drive } = await getGoogleClients()
 
-    // Ambil info file
     const fileRes = await drive.files.get({
       fileId,
       fields: 'id, name, mimeType, shortcutDetails',
       supportsAllDrives: true,
     })
-
     const file = fileRes.data
     let targetId = file.id
     if (file.mimeType === 'application/vnd.google-apps.shortcut' && file.shortcutDetails) {
       targetId = file.shortcutDetails.targetId
     }
 
-    // Hitung file di root folder
-    const rootStats = await calcStats(drive, `'${targetId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`)
+    // Root files + daftar subfolder secara paralel
+    const [rootFiles, folders] = await Promise.all([
+      listFiles(drive, targetId),
+      listFolders(drive, targetId),
+    ])
 
-    // Cari subfolder
-    const subRes = await drive.files.list({
-      q: `'${targetId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      fields: 'files(id, name)',
-    })
+    // Hitung tiap subfolder paralel (bukan N+1 sekuensial)
+    const subfolders = await Promise.all(
+      folders.map(async (f) => ({ name: f.name, ...pack(await listFiles(drive, f.id)) }))
+    )
 
-    const subfolders = []
-    for (const sub of subRes.data.files || []) {
-      const stats = await calcStats(drive, `'${sub.id}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`)
-      subfolders.push({ name: sub.name, ...stats })
-    }
+    const root = pack(rootFiles)
+    const totalBytes = root.bytes + subfolders.reduce((s, sf) => s + sf.bytes, 0)
+    const totalCount = root.count + subfolders.reduce((s, sf) => s + sf.count, 0)
 
     return NextResponse.json({
       name: file.name,
-      root: rootStats,
+      driveUrl: `https://drive.google.com/drive/folders/${targetId}`,
+      root,
       subfolders,
+      total: { count: totalCount, bytes: totalBytes, size: fmtSize(totalBytes) },
     })
-
   } catch (err) {
     if (err.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
-}
-
-async function calcStats(drive, q) {
-  const res = await drive.files.list({
-    q,
-    supportsAllDrives: true,
-    includeItemsFromAllDrives: true,
-    pageSize: 1000,
-    fields: 'files(size)',
-  })
-
-  const files = res.data.files || []
-  let totalBytes = 0
-  for (const f of files) {
-    if (f.size) totalBytes += parseInt(f.size)
-  }
-
-  const mb = totalBytes / (1024 * 1024)
-  const sizeStr = mb >= 1024
-    ? (mb / 1024).toFixed(2) + ' GB'
-    : mb.toFixed(2) + ' MB'
-
-  return { count: files.length, size: sizeStr }
 }

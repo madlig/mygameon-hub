@@ -5,8 +5,8 @@ export default function manifest() {
     description: 'Admin panel MyGameON — kelola pengiriman game',
     start_url: '/',
     display: 'standalone',
-    background_color: '#1C1917',
-    theme_color: '#1C1917',
+    background_color: '#0a0b0f',
+    theme_color: '#0a0b0f',
     orientation: 'portrait',
     icons: [
       {

@@ -3,7 +3,7 @@ import { getGoogleClients } from '@/lib/googleClient'
 
 export async function POST(request) {
   try {
-    const { email, cart, expirationTime } = await request.json()
+    const { email, cart, expirationTime, isBonus } = await request.json()
 
     if (!email || !cart || cart.length === 0) {
       return NextResponse.json({ error: 'Email dan cart wajib diisi' }, { status: 400 })
@@ -70,10 +70,12 @@ export async function POST(request) {
 
           await sheets.spreadsheets.values.append({
             spreadsheetId: sheetId,
-            range: 'Sheet1!A:D',
+            range: 'Sheet1!A:E',
             valueInputOption: 'RAW',
             requestBody: {
-              values: [[new Date().toISOString(), email, item.name, ownerEmail]],
+              // Kolom E = penanda 'bonus' (tidak dihitung di dashboard);
+              // bonus terkait pesanan yang sudah dibuat sebelumnya.
+              values: [[new Date().toISOString(), email, item.name, ownerEmail, isBonus ? 'bonus' : '']],
             },
           })
         } catch (e) {

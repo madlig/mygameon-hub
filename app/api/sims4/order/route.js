@@ -3,15 +3,36 @@ import { getGoogleClients } from '@/lib/googleClient'
 
 export async function POST(request) {
   try {
-    const { email, invoice, allowCC } = await request.json()
+    const { mode = 'email', email, invoice, allowCC } = await request.json()
 
-    if (!email || !invoice) {
-      return NextResponse.json({ error: 'Email dan invoice wajib diisi' }, { status: 400 })
+    if (!invoice) {
+      return NextResponse.json({ error: 'Kode pesanan wajib diisi' }, { status: 400 })
     }
 
     const { drive, gmail, sheets } = await getGoogleClients()
     const folderId = process.env.SIMS4_FOLDER_ID
     const sheetId = process.env.GSHEET_SIMS4_ID
+    const ccVal = allowCC ? 'Y' : 'N'
+
+    // ── Mode "Lisensi saja" — tanpa share Drive & tanpa kirim email ──
+    // Pembeli download launcher dari mygameon.store dan aktivasi pakai
+    // License Key (= invoice). Email opsional, hanya untuk arsip.
+    if (mode === 'license') {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range: 'Licenses!A:G',
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: [[invoice, '', '', ccVal, 'Active', email || '', new Date().toISOString()]],
+        },
+      })
+      return NextResponse.json({ success: true, mode: 'license' })
+    }
+
+    // ── Mode "Kirim via Email" (default) — perilaku lama ──
+    if (!email) {
+      return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
+    }
 
     // Resolve shortcut
     let realFolderId = folderId
@@ -39,7 +60,6 @@ export async function POST(request) {
     })
 
     // Catat ke spreadsheet Sims 4
-    const ccVal = allowCC ? 'Y' : 'N'
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: 'Licenses!A:G',

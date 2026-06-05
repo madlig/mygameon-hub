@@ -1,11 +1,9 @@
-const CACHE_NAME = 'mygameon-v2'
+const CACHE_NAME = 'mygameon-v3'
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(['/', '/search', '/revoke', '/check'])
-    })
-  )
+self.addEventListener('install', () => {
+  // Jangan precache halaman ter-autentikasi (dashboard, search, dll) —
+  // bisa menyimpan data sensitif/basi di perangkat. Cache diisi runtime
+  // hanya untuk aset statis.
   self.skipWaiting()
 })
 
@@ -21,28 +19,25 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('fetch', (event) => {
-  // Hanya cache GET request, skip API calls
-  if (
-    event.request.method !== 'GET' ||
-    event.request.url.includes('/api/')
-  ) {
+  const { request } = event
+
+  // Hanya tangani GET; lewati API.
+  if (request.method !== 'GET' || request.url.includes('/api/')) return
+
+  // Navigasi (dokumen HTML) → network-only. Jangan simpan halaman authed
+  // ke cache, supaya tidak ada data basi yang tampil offline.
+  if (request.mode === 'navigate' || request.destination === 'document') {
     return
   }
 
+  // Aset statis (script, style, font, gambar) → stale-while-revalidate.
   event.respondWith(
-    fetch(event.request)
+    fetch(request)
       .then((response) => {
-        // Update cache dengan response terbaru
-        const responseClone = response.clone()
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone)
-        })
+        const clone = response.clone()
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
         return response
       })
-      .catch(() => {
-        return caches.match(event.request).then((cached) => {
-          return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' })
-        })
-      })
+      .catch(() => caches.match(request).then((cached) => cached || Response.error()))
   )
 })

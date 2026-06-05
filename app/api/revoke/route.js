@@ -1,48 +1,93 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
+import { parseSheetDate } from '@/lib/utils'
+
+const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const email = searchParams.get('email')
-
     if (!email) {
       return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
     }
 
-    const { drive } = await getGoogleClients()
+    const emailLower = email.toLowerCase()
+    const safeEmail = email.replace(/'/g, "\\'") // cegah query injection
+    const { drive, sheets } = await getGoogleClients()
 
-    // Cara yang benar — sama persis dengan bot asli
-    // Cari semua file dimana email ini adalah reader
-    // Tambahkan filter folder saja
-const q = `'${email}' in readers and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
-    const res = await drive.files.list({
-      q,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      pageSize: 100,
-      fields: 'files(id, name, permissions)',
-    })
+    // Scan Drive (paginated) + baca sheet konteks paralel
+    const drivePromise = (async () => {
+      const files = []
+      let pageToken
+      do {
+        const res = await drive.files.list({
+          q: `'${safeEmail}' in readers and mimeType = '${FOLDER_MIME}' and trashed = false`,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          pageSize: 100,
+          pageToken,
+          fields: 'nextPageToken, files(id, name, permissions(id, emailAddress))',
+        })
+        for (const f of res.data.files || []) files.push(f)
+        pageToken = res.data.nextPageToken
+      } while (pageToken)
+      return files
+    })()
 
-    const files = res.data.files || []
+    const sheetPromise = (async () => {
+      try {
+        const [logRes, expRes] = await Promise.all([
+          sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_ID, range: 'Sheet1!A:D', valueRenderOption: 'UNFORMATTED_VALUE' }),
+          sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_ID, range: 'ExpiringAccess!A:F' }),
+        ])
+        return { log: logRes.data.values || [], exp: expRes.data.values || [] }
+      } catch (e) {
+        return { log: [], exp: [] }
+      }
+    })()
+
+    const [files, sheetData] = await Promise.all([drivePromise, sheetPromise])
+
+    // Map kapan diberikan: email|namaFolder -> grantedAt (ISO terbaru)
+    const grantedMap = new Map()
+    for (const row of sheetData.log) {
+      const e = (row[1] || '').toLowerCase()
+      const name = (row[2] || '').toLowerCase()
+      const t = parseSheetDate(row[0])
+      if (!e || !name || !t) continue
+      const key = `${e}|${name}`
+      const prev = grantedMap.get(key)
+      if (!prev || new Date(t) > new Date(prev)) grantedMap.set(key, t)
+    }
+
+    // Map kadaluarsa: email|fileId -> { expiresAt, status }
+    const expMap = new Map()
+    for (const row of sheetData.exp) {
+      const e = (row[0] || '').toLowerCase()
+      const fid = row[1]
+      if (!e || !fid) continue
+      expMap.set(`${e}|${fid}`, { expiresAt: row[4] || null, status: (row[5] || '').toLowerCase() })
+    }
+
     const accessList = []
-
     for (const file of files) {
       if (!file.permissions) continue
-      const perm = file.permissions.find(
-        p => p.emailAddress?.toLowerCase() === email.toLowerCase()
-      )
-      if (perm) {
-        accessList.push({
-          fileId: file.id,
-          fileName: file.name,
-          permissionId: perm.id,
-        })
-      }
+      const perm = file.permissions.find(p => p.emailAddress?.toLowerCase() === emailLower)
+      if (!perm) continue
+      const exp = expMap.get(`${emailLower}|${file.id}`) || null
+      accessList.push({
+        fileId: file.id,
+        fileName: file.name,
+        permissionId: perm.id,
+        grantedAt: grantedMap.get(`${emailLower}|${(file.name || '').toLowerCase()}`) || null,
+        expiresAt: exp?.expiresAt || null,
+        tracked: !!exp,
+        sheetStatus: exp?.status || null,
+      })
     }
 
     return NextResponse.json({ accessList })
-
   } catch (err) {
     if (err.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -54,38 +99,62 @@ const q = `'${email}' in readers and mimeType = 'application/vnd.google-apps.fol
 
 export async function DELETE(request) {
   try {
-    const { fileId, permissionId, revokeAll, accessList } = await request.json()
+    const { email, items } = await request.json()
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'Tidak ada akses yang dipilih' }, { status: 400 })
+    }
 
-    const { drive } = await getGoogleClients()
+    const { drive, sheets } = await getGoogleClients()
 
-    if (revokeAll && accessList?.length > 0) {
-      const results = []
-      for (const item of accessList) {
-        try {
-          await drive.permissions.delete({
-            fileId: item.fileId,
-            permissionId: item.permissionId,
-            supportsAllDrives: true,
-          })
-          results.push({ fileId: item.fileId, status: 'success' })
-        } catch (e) {
-          results.push({ fileId: item.fileId, status: 'error', message: e.message })
-        }
+    const results = []
+    for (const item of items) {
+      if (!item.fileId || !item.permissionId) {
+        results.push({ fileId: item.fileId, fileName: item.fileName, status: 'error', message: 'Parameter tidak lengkap' })
+        continue
       }
-      return NextResponse.json({ results })
+      try {
+        await drive.permissions.delete({
+          fileId: item.fileId,
+          permissionId: item.permissionId,
+          supportsAllDrives: true,
+        })
+        results.push({ fileId: item.fileId, fileName: item.fileName, status: 'success' })
+      } catch (e) {
+        results.push({ fileId: item.fileId, fileName: item.fileName, status: 'error', message: e.message })
+      }
     }
 
-    if (fileId && permissionId) {
-      await drive.permissions.delete({
-        fileId,
-        permissionId,
-        supportsAllDrives: true,
-      })
-      return NextResponse.json({ success: true })
+    // Sinkronkan ExpiringAccess → 'revoked' untuk yang berhasil dicabut
+    const okIds = new Set(results.filter(r => r.status === 'success').map(r => r.fileId))
+    if (email && okIds.size > 0) {
+      try {
+        const expRes = await sheets.spreadsheets.values.get({
+          spreadsheetId: process.env.GSHEET_ID,
+          range: 'ExpiringAccess!A:F',
+        })
+        const rows = expRes.data.values || []
+        const emailLower = email.toLowerCase()
+        const updates = []
+        rows.forEach((row, i) => {
+          const e = (row[0] || '').toLowerCase()
+          const fid = row[1]
+          const status = (row[5] || '').toLowerCase()
+          if (e === emailLower && okIds.has(fid) && status === 'active') {
+            updates.push({ range: `ExpiringAccess!F${i + 1}`, values: [['revoked']] })
+          }
+        })
+        if (updates.length > 0) {
+          await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId: process.env.GSHEET_ID,
+            requestBody: { valueInputOption: 'USER_ENTERED', data: updates },
+          })
+        }
+      } catch (e) {
+        console.error('Sync ExpiringAccess error:', e.message)
+      }
     }
 
-    return NextResponse.json({ error: 'Parameter tidak lengkap' }, { status: 400 })
-
+    return NextResponse.json({ results })
   } catch (err) {
     if (err.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
