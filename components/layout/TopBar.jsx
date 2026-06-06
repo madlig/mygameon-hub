@@ -25,36 +25,42 @@ export default function TopBar({ title, backHref }) {
           : { color: '#ef4444', label: 'Tidak terhubung', glow: false }
 
   return (
-    <header className="mb-5 flex items-center justify-between border-b border-[var(--border-soft)] px-1 pb-3.5 md:px-0">
-      <div className="flex min-w-0 items-center gap-2.5">
-        {backHref && (
-          <Link href={backHref} className="text-[var(--text-2)] transition-colors hover:text-[var(--text)]">
-            <ArrowLeft size={18} />
-          </Link>
-        )}
-        <h1 className="font-display truncate text-base font-bold tracking-tight text-[var(--text)]">{title}</h1>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="hidden items-center gap-3 md:flex">
-          <span className="text-[11px] text-[var(--text-3)]">{today}</span>
-          <span className="h-3.5 w-px bg-[var(--border-soft)]" />
-          <div className="flex items-center gap-1.5">
-            <span
-              className={`h-2 w-2 rounded-full ${conn.glow ? 'ringGlow' : ''}`}
-              style={{ background: conn.color }}
-            />
-            <span className="text-[11px] font-semibold" style={{ color: conn.color }}>
-              {conn.label}
-            </span>
+    <header
+      className="sticky top-0 z-30 -mx-[var(--pad-card)] -mt-[var(--pad-card)] mb-5 border-b border-[var(--border-soft)] px-[var(--pad-card)] py-3 backdrop-blur-xl"
+      style={{ background: 'rgba(10,11,15,0.82)' }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {backHref && (
+            <Link href={backHref} className="pressable shrink-0 text-[var(--text-2)] transition-colors hover:text-[var(--text)]">
+              <ArrowLeft size={18} />
+            </Link>
+          )}
+          {/* Brand mark — mobile only (desktop punya sidebar) */}
+          <img
+            src="/icons/icon-192.png"
+            alt="MyGameON"
+            className="h-8 w-8 shrink-0 rounded-lg ring-1 ring-[var(--border-soft)] md:hidden"
+          />
+          <div className="min-w-0">
+            <h1 className="font-display truncate text-base font-bold tracking-tight text-[var(--text)] md:text-lg">{title}</h1>
+            <p className="hidden text-[10.5px] text-[var(--text-3)] md:block">{today}</p>
           </div>
         </div>
-        <button
-          onClick={() => signOut({ callbackUrl: '/login' })}
-          className="pressable text-[var(--text-3)] transition-colors hover:text-[var(--text)] md:hidden"
-          title="Logout"
-        >
-          <LogOut size={16} />
-        </button>
+
+        <div className="flex shrink-0 items-center gap-2.5">
+          <span className="flex items-center gap-1.5 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-2.5 py-1">
+            <span className={`h-2 w-2 rounded-full ${conn.glow ? 'ringGlow' : ''}`} style={{ background: conn.color }} />
+            <span className="hidden text-[11px] font-semibold sm:inline" style={{ color: conn.color }}>{conn.label}</span>
+          </span>
+          <button
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="pressable flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-3)] transition-colors hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] md:hidden"
+            title="Logout"
+          >
+            <LogOut size={16} />
+          </button>
+        </div>
       </div>
     </header>
   )
