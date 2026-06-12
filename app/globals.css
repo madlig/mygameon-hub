@@ -292,3 +292,31 @@ body[data-sb="collapsed"] {
     transition: none !important;
   }
 }
+
+/* ─────────────────────────────────────────────
+   Mobile friendliness
+   ───────────────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Hilangkan highlight abu saat tap + cegah delay/zoom dobel-tap */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+button, a, input, select, textarea, label {
+  touch-action: manipulation;
+}
+
+/* iOS Safari memaksa zoom saat fokus ke input ber-font < 16px.
+   Di layar kecil, paksa semua kontrol form minimal 16px. */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

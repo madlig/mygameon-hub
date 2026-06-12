@@ -34,6 +34,12 @@ export const viewport = {
   themeColor: '#0a0b0f',
   width: 'device-width',
   initialScale: 1,
+  // Layar statis di mobile: tanpa zoom aksidental saat fokus input.
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  // Keyboard mendorong konten, bukan menutupi bar bawah.
+  interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({ children }) {
