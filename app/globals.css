@@ -241,6 +241,13 @@ body[data-sb="collapsed"] {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
+/* Fade tanpa transform — dipakai container halaman. Animasi transform pada
+   ancestor membuat elemen `position: fixed` di dalamnya terkunci ke konten
+   (containing block), bukan ke viewport. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 @keyframes pulseDot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.55; transform: scale(0.85); }
@@ -263,7 +270,7 @@ body[data-sb="collapsed"] {
   to { opacity: 1; transform: scale(1); }
 }
 
-.fadeUp { animation: fadeUp 0.28s ease-out both; }
+.fadeUp { animation: fadeIn 0.28s ease-out both; }
 .pulseDot { animation: pulseDot 2.2s ease-in-out infinite; }
 .ringGlow { animation: ringGlow 2.4s ease-out infinite; }
 .animate-overlay { animation: overlayIn 0.18s ease-out both; }

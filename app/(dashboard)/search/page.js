@@ -337,7 +337,7 @@ export default function SearchPage() {
           {/* Hasil kirim — mobile */}
           {sendReport && (
             <div className="mb-4 md:hidden">
-              <SendResult report={sendReport} email={sentTo} onClose={() => setSendReport(null)} onReset={() => setSendReport(null)} />
+              <SendResult report={sendReport} email={sentTo} onClose={() => setSendReport(null)} onReset={() => { setSendReport(null); setKeyword('') }} />
             </div>
           )}
 
@@ -405,7 +405,7 @@ export default function SearchPage() {
         <div className="hidden md:block">
           <div className="sticky top-4 flex flex-col gap-3">
             {sendReport && (
-              <SendResult report={sendReport} email={sentTo} onClose={() => setSendReport(null)} onReset={() => setSendReport(null)} />
+              <SendResult report={sendReport} email={sentTo} onClose={() => setSendReport(null)} onReset={() => { setSendReport(null); setKeyword('') }} />
             )}
             <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
               <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
