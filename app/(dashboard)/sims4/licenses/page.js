@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, KeyRound, AlertCircle, Check, Copy, CheckCheck, Send, X, Calendar } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import StatCard from '@/components/shared/StatCard'
@@ -46,7 +47,10 @@ export default function Sims4LicensesPage() {
   const [copiedKey, setCopiedKey] = useState(null)
   const [resend, setResend]     = useState(null)
   const [copiedMsg, setCopiedMsg] = useState(false)
+  const [mounted, setMounted]   = useState(false)
   const debounceRef = useRef(null)
+
+  useEffect(() => { setMounted(true) }, [])
 
   async function fetchLicenses(q, p, f) {
     setIsLoading(true)
@@ -286,8 +290,9 @@ export default function Sims4LicensesPage() {
         </div>
       )}
 
-      {/* Resend modal */}
-      {resend && (
+      {/* Resend modal — portal ke body agar fixed positioning lepas dari
+            scroll container <main> (bug iOS Safari) */}
+      {mounted && resend && createPortal(
         <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
           <div className="animate-overlay absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setResend(null)} />
           <div className="animate-sheet relative w-full max-w-[440px] overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
@@ -304,7 +309,8 @@ export default function Sims4LicensesPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmDialog

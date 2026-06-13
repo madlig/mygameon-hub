@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, X } from 'lucide-react'
 
 /**
@@ -26,6 +27,9 @@ export default function ConfirmDialog({
   onConfirm,
   onClose,
 }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
   useEffect(() => {
     if (!open) return
     function onKey(e) {
@@ -35,14 +39,16 @@ export default function ConfirmDialog({
     return () => document.removeEventListener('keydown', onKey)
   }, [open, loading, onClose])
 
-  if (!open) return null
+  if (!open || !mounted) return null
 
   const confirmClasses =
     tone === 'danger'
       ? 'bg-[var(--danger)] text-white hover:brightness-110'
       : 'bg-[var(--primary)] text-[var(--primary-fg)] hover:brightness-105'
 
-  return (
+  // Portal ke body: dialog ini sering dirender di dalam <main> yang
+  // overflow-y-auto; iOS Safari mengunci elemen fixed ke scroll container itu.
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-end justify-center p-4 sm:items-center">
       <div
         className="animate-overlay absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -96,6 +102,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
