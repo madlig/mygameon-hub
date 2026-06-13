@@ -457,8 +457,17 @@ export default function SearchPage() {
                 </div>
               </div>
             </div>
-            <div className="overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 0.5rem)' }}>
-              <CheckoutBody {...checkoutProps} />
+            <div className="flex-1 overflow-y-auto">
+              <CheckoutBody {...checkoutProps} hideSubmit />
+            </div>
+            <div className="shrink-0 border-t border-[var(--border-soft)] px-4 pt-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 0.75rem)' }}>
+              <button
+                onClick={requestSend}
+                disabled={!emailValid || isSending}
+                className="pressable flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-3 text-sm font-bold text-[var(--primary-fg)] transition-all hover:brightness-105 hover:shadow-[0_10px_28px_-10px_rgba(255,209,0,0.6)] disabled:opacity-50 disabled:hover:shadow-none"
+              >
+                {isSending ? 'Mengirim…' : <>Kirim {cart.length} game <span aria-hidden>→</span></>}
+              </button>
             </div>
           </div>
         </div>

@@ -29,6 +29,7 @@ export default function CheckoutBody({
   expiryOption, setExpiryOption, customDays, setCustomDays,
   isBonus, setIsBonus,
   sendError, isSending, onSend,
+  hideSubmit = false,
 }) {
   const [savingBundle, setSavingBundle] = useState(false)
   const [bundleName, setBundleName] = useState('')
@@ -195,13 +196,15 @@ export default function CheckoutBody({
       )}
 
       {/* Send */}
-      <button
-        onClick={onSend}
-        disabled={!emailValid || isSending}
-        className="pressable flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-3 text-sm font-bold text-[var(--primary-fg)] transition-all hover:brightness-105 hover:shadow-[0_10px_28px_-10px_rgba(255,209,0,0.6)] disabled:opacity-50 disabled:hover:shadow-none"
-      >
-        {isSending ? 'Mengirim…' : <>Kirim {cart.length} game <span aria-hidden>→</span></>}
-      </button>
+      {!hideSubmit && (
+        <button
+          onClick={onSend}
+          disabled={!emailValid || isSending}
+          className="pressable flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-3 text-sm font-bold text-[var(--primary-fg)] transition-all hover:brightness-105 hover:shadow-[0_10px_28px_-10px_rgba(255,209,0,0.6)] disabled:opacity-50 disabled:hover:shadow-none"
+        >
+          {isSending ? 'Mengirim…' : <>Kirim {cart.length} game <span aria-hidden>→</span></>}
+        </button>
+      )}
     </div>
   )
 }
