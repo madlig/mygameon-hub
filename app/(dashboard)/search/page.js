@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, X, ShoppingCart, CornerDownLeft, ListPlus, AlertCircle, Star, Package } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import GameItem from '@/components/shared/GameItem'
@@ -57,6 +58,7 @@ export default function SearchPage() {
   const [infoMap, setInfoMap]         = useState({})
   const [cartSheetOpen, setCartSheetOpen] = useState(false)
   const [isBonus, setIsBonus]         = useState(false)
+  const [mounted, setMounted]         = useState(false)
   const debounceRef = useRef(null)
   const reqIdRef = useRef(0)
   const abortRef = useRef(null)
@@ -65,6 +67,7 @@ export default function SearchPage() {
 
   // Load semua dari localStorage
   useEffect(() => {
+    setMounted(true)
     setCart(loadJSON(SK.cart))
     setRecentEmails(loadJSON(SK.emails))
     setRecentGames(loadJSON(SK.games))
@@ -424,53 +427,59 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* ── Mobile: bar keranjang ── */}
-      {cart.length > 0 && !cartSheetOpen && (
-        <button
-          onClick={() => setCartSheetOpen(true)}
-          className="pressable fixed left-4 right-4 z-40 flex items-center justify-between rounded-2xl bg-[var(--primary)] px-4 py-3 shadow-[0_10px_30px_-12px_rgba(255,209,0,0.6)] md:hidden"
-          style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 4.5rem)' }}
-        >
-          <span className="flex items-center gap-2 text-sm font-extrabold text-[var(--primary-fg)]">
-            <ShoppingCart size={16} /> {cart.length} game di keranjang
-          </span>
-          <span className="rounded-lg bg-[var(--primary-fg)]/10 px-3 py-1 text-sm font-extrabold text-[var(--primary-fg)]">Lihat & kirim →</span>
-        </button>
-      )}
+      {/* ── Mobile: bar keranjang + sheet (portal ke body agar lepas dari
+            scroll container `main` — fixed positioning bermasalah di iOS Safari
+            jika berada di dalam ancestor overflow-scroll) ── */}
+      {mounted && createPortal(
+        <>
+          {cart.length > 0 && !cartSheetOpen && (
+            <button
+              onClick={() => setCartSheetOpen(true)}
+              className="pressable fixed left-4 right-4 z-[55] flex items-center justify-between rounded-2xl bg-[var(--primary)] px-4 py-3 shadow-[0_10px_30px_-12px_rgba(255,209,0,0.6)] md:hidden"
+              style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 4.5rem)' }}
+            >
+              <span className="flex items-center gap-2 text-sm font-extrabold text-[var(--primary-fg)]">
+                <ShoppingCart size={16} /> {cart.length} game di keranjang
+              </span>
+              <span className="rounded-lg bg-[var(--primary-fg)]/10 px-3 py-1 text-sm font-extrabold text-[var(--primary-fg)]">Lihat &amp; kirim →</span>
+            </button>
+          )}
 
-      {/* ── Mobile: sheet checkout ── */}
-      {cartSheetOpen && (
-        <div className="fixed inset-0 z-[60] md:hidden">
-          <div className="animate-overlay absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setCartSheetOpen(false)} />
-          <div className="animate-sheet absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-3xl border-t border-[var(--border-strong)] bg-[var(--surface)]">
-            <div className="shrink-0 px-5 pt-3">
-              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
-              <div className="flex items-center justify-between pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/15 text-[var(--primary)]"><ShoppingCart size={15} /></span>
-                  <p className="font-display text-base font-bold text-[var(--text)]">Keranjang</p>
-                  {cart.length > 0 && <span className="rounded-full bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-extrabold text-[var(--primary-fg)]">{cart.length}</span>}
+          {cartSheetOpen && (
+            <div className="fixed inset-0 z-[70] md:hidden">
+              <div className="animate-overlay absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setCartSheetOpen(false)} />
+              <div className="animate-sheet absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col rounded-t-3xl border-t border-[var(--border-strong)] bg-[var(--surface)]">
+                <div className="shrink-0 px-5 pt-3">
+                  <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
+                  <div className="flex items-center justify-between pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/15 text-[var(--primary)]"><ShoppingCart size={15} /></span>
+                      <p className="font-display text-base font-bold text-[var(--text)]">Keranjang</p>
+                      {cart.length > 0 && <span className="rounded-full bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-extrabold text-[var(--primary-fg)]">{cart.length}</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {cart.length > 0 && <button onClick={clearCart} className="text-[11px] font-medium text-[var(--text-3)] hover:text-[var(--danger)]">Kosongkan</button>}
+                      <button onClick={() => setCartSheetOpen(false)} className="text-[var(--text-3)] hover:text-[var(--text)]" aria-label="Tutup"><X size={18} /></button>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {cart.length > 0 && <button onClick={clearCart} className="text-[11px] font-medium text-[var(--text-3)] hover:text-[var(--danger)]">Kosongkan</button>}
-                  <button onClick={() => setCartSheetOpen(false)} className="text-[var(--text-3)] hover:text-[var(--text)]" aria-label="Tutup"><X size={18} /></button>
+                <div className="flex-1 overflow-y-auto">
+                  <CheckoutBody {...checkoutProps} hideSubmit />
+                </div>
+                <div className="shrink-0 border-t border-[var(--border-soft)] px-4 pt-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 0.75rem)' }}>
+                  <button
+                    onClick={requestSend}
+                    disabled={!emailValid || isSending}
+                    className="pressable flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-3 text-sm font-bold text-[var(--primary-fg)] transition-all hover:brightness-105 hover:shadow-[0_10px_28px_-10px_rgba(255,209,0,0.6)] disabled:opacity-50 disabled:hover:shadow-none"
+                  >
+                    {isSending ? 'Mengirim…' : <>Kirim {cart.length} game <span aria-hidden>→</span></>}
+                  </button>
                 </div>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <CheckoutBody {...checkoutProps} hideSubmit />
-            </div>
-            <div className="shrink-0 border-t border-[var(--border-soft)] px-4 pt-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 0.75rem)' }}>
-              <button
-                onClick={requestSend}
-                disabled={!emailValid || isSending}
-                className="pressable flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--primary)] py-3 text-sm font-bold text-[var(--primary-fg)] transition-all hover:brightness-105 hover:shadow-[0_10px_28px_-10px_rgba(255,209,0,0.6)] disabled:opacity-50 disabled:hover:shadow-none"
-              >
-                {isSending ? 'Mengirim…' : <>Kirim {cart.length} game <span aria-hidden>→</span></>}
-              </button>
-            </div>
-          </div>
-        </div>
+          )}
+        </>,
+        document.body
       )}
 
       <ConfirmDialog
