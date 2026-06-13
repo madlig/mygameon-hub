@@ -428,7 +428,8 @@ export default function SearchPage() {
       {cart.length > 0 && !cartSheetOpen && (
         <button
           onClick={() => setCartSheetOpen(true)}
-          className="pressable fixed bottom-[4.75rem] left-4 right-4 z-40 flex items-center justify-between rounded-2xl bg-[var(--primary)] px-4 py-3 shadow-[0_10px_30px_-12px_rgba(255,209,0,0.6)] md:hidden"
+          className="pressable fixed left-4 right-4 z-40 flex items-center justify-between rounded-2xl bg-[var(--primary)] px-4 py-3 shadow-[0_10px_30px_-12px_rgba(255,209,0,0.6)] md:hidden"
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 12px) + 4.5rem)' }}
         >
           <span className="flex items-center gap-2 text-sm font-extrabold text-[var(--primary-fg)]">
             <ShoppingCart size={16} /> {cart.length} game di keranjang
@@ -441,7 +442,7 @@ export default function SearchPage() {
       {cartSheetOpen && (
         <div className="fixed inset-0 z-[60] md:hidden">
           <div className="animate-overlay absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setCartSheetOpen(false)} />
-          <div className="animate-sheet absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col rounded-t-3xl border-t border-[var(--border-strong)] bg-[var(--surface)]">
+          <div className="animate-sheet absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-3xl border-t border-[var(--border-strong)] bg-[var(--surface)]">
             <div className="shrink-0 px-5 pt-3">
               <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border-strong)]" />
               <div className="flex items-center justify-between pb-2">
