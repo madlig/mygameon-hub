@@ -1,39 +1,27 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
 
-// Cache to avoid spamming Google Drive API
+// Global Cache
 let limitCache = {
-  status: 'ok', // 'ok' or 'limit'
+  status: 'ok',
   email: '',
   reason: '',
   lastCheck: 0
 }
 
-export async function GET() {
+// Stores 1 fileId per unique workspace: { 'workspace1@': 'fileId1', 'workspace2@': 'fileId2' }
+let knownWorkspaces = {}
+let lastWorkspaceDiscovery = 0
+let isDiscovering = false
+
+async function discoverWorkspaces(drive, folderId) {
+  if (isDiscovering) return
+  isDiscovering = true
   try {
-    const { drive, session } = await getGoogleClients()
-    const adminEmail = session?.user?.email || 'Unknown'
-
-    // Return cached result if checked within the last 5 minutes
-    if (Date.now() - limitCache.lastCheck < 5 * 60 * 1000) {
-      if (limitCache.status === 'limit') {
-        return NextResponse.json({
-          status: 'limit',
-          reason: limitCache.reason,
-          email: limitCache.email
-        })
-      } else {
-        return NextResponse.json({ status: 'ok', email: adminEmail })
-      }
-    }
-
-    const folderId = process.env.GDRIVE_FOLDER_ID
-    if (!folderId) return NextResponse.json({ status: 'ok', email: adminEmail })
-
-    // 1. Get 10 recent shortcuts from the main folder
     const listRes = await drive.files.list({
       q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
-      pageSize: 10,
+      pageSize: 150,
+      orderBy: 'createdTime desc',
       fields: 'files(shortcutDetails/targetId)'
     })
 
@@ -41,16 +29,80 @@ export async function GET() {
       ?.map(f => f.shortcutDetails?.targetId)
       .filter(Boolean) || []
 
+    for (const targetId of targetIds) {
+      try {
+        const fileInfo = await drive.files.get({
+          fileId: targetId,
+          fields: 'owners',
+          supportsAllDrives: true
+        })
+        const ownerEmail = fileInfo.data.owners?.[0]?.emailAddress
+        if (ownerEmail && !knownWorkspaces[ownerEmail]) {
+          knownWorkspaces[ownerEmail] = targetId
+        }
+      } catch (err) {
+        // ignore individual file errors during discovery
+      }
+    }
+    lastWorkspaceDiscovery = Date.now()
+  } catch (error) {
+    console.error('Workspace discovery failed:', error)
+  } finally {
+    isDiscovering = false
+  }
+}
+
+export async function GET() {
+  try {
+    const { drive, session } = await getGoogleClients()
+    const adminEmail = session?.user?.email || 'Unknown'
+    const folderId = process.env.GDRIVE_FOLDER_ID
+
+    if (!folderId) return NextResponse.json({ status: 'ok', email: adminEmail })
+
+    // 1. Kick off background discovery if we haven't discovered yet or it's been 24 hours
+    if (Object.keys(knownWorkspaces).length === 0 || Date.now() - lastWorkspaceDiscovery > 1000 * 60 * 60 * 24) {
+      // Don't await it, let it run in background so UI doesn't hang
+      discoverWorkspaces(drive, folderId)
+    }
+
+    // Return cached result if checked within the last 3 minutes
+    if (Date.now() - limitCache.lastCheck < 3 * 60 * 1000) {
+      if (limitCache.status === 'limit') {
+        return NextResponse.json({
+          status: 'limit',
+          reason: limitCache.reason,
+          email: limitCache.email
+        })
+      }
+      // If ok, we can fall through and re-check if we have knownWorkspaces,
+      // but to save API calls, let's just return OK if we recently checked and it was OK.
+      return NextResponse.json({ status: 'ok', email: adminEmail })
+    }
+
     let limitedEmail = null
     let limitedReason = ''
 
-    // 2. Test 1-byte download on all 10 target files in parallel
-    if (targetIds.length > 0) {
-      const downloadPromises = targetIds.map(targetId =>
+    // 2. Test 1-byte download on ONE file from EVERY known workspace!
+    const testFileIds = Object.values(knownWorkspaces)
+    
+    // If discovery hasn't finished yet (first load), fallback to testing a few random files
+    let idsToTest = testFileIds
+    if (idsToTest.length === 0) {
+      const listRes = await drive.files.list({
+        q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
+        pageSize: 5,
+        fields: 'files(shortcutDetails/targetId)'
+      })
+      idsToTest = listRes.data.files?.map(f => f.shortcutDetails?.targetId).filter(Boolean) || []
+    }
+
+    if (idsToTest.length > 0) {
+      const downloadPromises = idsToTest.map(targetId =>
         drive.files.get(
           { fileId: targetId, alt: 'media' },
           { headers: { Range: 'bytes=0-0' } }
-        ).catch(err => ({ error: err, targetId })) // catch and return error object
+        ).catch(err => ({ error: err, targetId }))
       )
 
       const results = await Promise.all(downloadPromises)
@@ -59,21 +111,19 @@ export async function GET() {
         if (res && res.error) {
           const dReason = res.error.errors?.[0]?.reason || res.error.message || ''
           if (dReason.toLowerCase().includes('downloadquota') || dReason.toLowerCase().includes('quota')) {
-            // Found a limited file! Let's get its owner.
-            try {
-              const fileInfo = await drive.files.get({
-                fileId: res.targetId,
-                fields: 'owners',
-                supportsAllDrives: true
-              })
-              limitedEmail = fileInfo.data.owners?.[0]?.emailAddress || 'Unknown Workspace'
-              limitedReason = 'Download Quota Exceeded (Bandwidth Limit)'
-              break // Stop checking others
-            } catch (ownerErr) {
-              limitedEmail = 'Unknown Workspace'
-              limitedReason = 'Download Quota Exceeded (Bandwidth Limit)'
-              break
+            // Find which email owns this failing targetId
+            limitedEmail = Object.keys(knownWorkspaces).find(key => knownWorkspaces[key] === res.targetId)
+            if (!limitedEmail) {
+              // If not found in cache (fallback mode), fetch owner
+              try {
+                const info = await drive.files.get({ fileId: res.targetId, fields: 'owners', supportsAllDrives: true })
+                limitedEmail = info.data.owners?.[0]?.emailAddress || 'Unknown Workspace'
+              } catch (e) {
+                limitedEmail = 'Unknown Workspace'
+              }
             }
+            limitedReason = 'Download Quota Exceeded (Bandwidth Limit)'
+            break
           }
         }
       }
