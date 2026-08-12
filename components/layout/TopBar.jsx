@@ -3,9 +3,26 @@
 import { ArrowLeft, LogOut } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
 export default function TopBar({ title, backHref }) {
   const { data: session, status } = useSession()
+  const [driveLimit, setDriveLimit] = useState(null)
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetch('/api/drive/status')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.status === 'limit') {
+            setDriveLimit(data)
+          } else {
+            setDriveLimit(null)
+          }
+        })
+        .catch((err) => console.error(err))
+    }
+  }, [status])
 
   const today = new Date().toLocaleDateString('id-ID', {
     weekday: 'long',
@@ -20,9 +37,11 @@ export default function TopBar({ title, backHref }) {
       ? { color: '#a1a1aa', label: 'Menghubungkan…', glow: false }
       : session?.error === 'RefreshTokenError'
         ? { color: '#ef4444', label: 'Sesi habis', glow: false }
-        : status === 'authenticated'
-          ? { color: '#22c55e', label: 'Drive terhubung', glow: true }
-          : { color: '#ef4444', label: 'Tidak terhubung', glow: false }
+        : driveLimit?.status === 'limit'
+          ? { color: '#ef4444', label: `Limit: ${driveLimit.email || 'Drive'}`, glow: true }
+          : status === 'authenticated'
+            ? { color: '#22c55e', label: 'Drive terhubung', glow: true }
+            : { color: '#ef4444', label: 'Tidak terhubung', glow: false }
 
   return (
     <header
