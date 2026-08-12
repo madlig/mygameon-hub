@@ -30,7 +30,11 @@ export async function GET() {
 
     // NEW: Check Download Limit (Bandwidth) by trying to read 1 byte of 1 file
     try {
-      const listRes = await drive.files.list({ pageSize: 1, fields: 'files(id)' })
+      const listRes = await drive.files.list({
+        pageSize: 1,
+        fields: 'files(id)',
+        q: "mimeType != 'application/vnd.google-apps.folder' and mimeType != 'application/vnd.google-apps.document' and mimeType != 'application/vnd.google-apps.spreadsheet'"
+      })
       if (listRes.data.files && listRes.data.files.length > 0) {
         const testFileId = listRes.data.files[0].id
         await drive.files.get(

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut, useSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 import {
   Clock,
   Folder,
@@ -41,6 +42,19 @@ const navGroups = [
 export default function Sidebar() {
   const pathname = usePathname()
   const { data: session, status } = useSession()
+  const [driveLimit, setDriveLimit] = useState(null)
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetch('/api/drive/status')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.status === 'limit') setDriveLimit(data)
+          else setDriveLimit(null)
+        })
+        .catch(console.error)
+    }
+  }, [status])
 
   const online = status === 'authenticated' && session?.error !== 'RefreshTokenError'
 
@@ -104,9 +118,17 @@ export default function Sidebar() {
       {/* Status + user */}
       <div className="border-t border-[var(--border-soft)] p-3">
         <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-[var(--elevated)]/60 px-2.5 py-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${online ? 'ringGlow bg-[var(--success)]' : 'bg-[var(--danger)]'}`} />
-          <span className={`text-[10px] font-semibold ${online ? 'text-[#4ade80]' : 'text-[#fca5a5]'}`}>
-            {online ? 'Drive terhubung' : status === 'loading' ? 'Menghubungkan…' : 'Sesi habis'}
+          <span className={`h-1.5 w-1.5 rounded-full ${
+            driveLimit?.status === 'limit' ? 'ringGlow bg-[var(--danger)]' : 
+            online ? 'ringGlow bg-[var(--success)]' : 'bg-[var(--danger)]'
+          }`} />
+          <span className={`text-[10px] font-semibold ${
+            driveLimit?.status === 'limit' ? 'text-[#ef4444]' : 
+            online ? 'text-[#4ade80]' : 'text-[#fca5a5]'
+          }`}>
+            {driveLimit?.status === 'limit' ? 'Limit: ' + (driveLimit.email || 'Drive') : 
+             online ? 'Drive terhubung' : 
+             status === 'loading' ? 'Menghubungkan…' : 'Sesi habis'}
           </span>
         </div>
         <div className="flex items-center gap-2.5">
