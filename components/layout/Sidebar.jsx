@@ -117,20 +117,43 @@ export default function Sidebar() {
 
       {/* Status + user */}
       <div className="border-t border-[var(--border-soft)] p-3">
-        <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-[var(--elevated)]/60 px-2.5 py-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${
-            driveLimit?.status === 'limit' ? 'ringGlow bg-[var(--danger)]' : 
-            online ? 'ringGlow bg-[var(--success)]' : 'bg-[var(--danger)]'
-          }`} />
-          <span className={`text-[10px] font-semibold ${
-            driveLimit?.status === 'limit' ? 'text-[#ef4444]' : 
-            online ? 'text-[#4ade80]' : 'text-[#fca5a5]'
-          }`}>
-            {driveLimit?.status === 'limit' ? 'Limit: ' + (driveLimit.email || 'Drive') : 
-             online ? 'Drive terhubung' : 
-             status === 'loading' ? 'Menghubungkan…' : 'Sesi habis'}
-          </span>
+        {/* PREMIUM SIDEBAR STATUS INDICATOR */}
+        <div className="mb-3">
+          {status === 'loading' ? (
+            <div className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 shadow-sm">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-gray-400" />
+              <span className="text-[11px] font-semibold text-gray-400">Menghubungkan…</span>
+            </div>
+          ) : session?.error === 'RefreshTokenError' ? (
+            <div className="flex w-full items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
+              <span className="h-2 w-2 rounded-full bg-red-500" />
+              <span className="text-[11px] font-semibold text-red-500">Sesi Terputus</span>
+            </div>
+          ) : driveLimit?.status === 'limit' ? (
+            <div className="group relative flex w-full flex-col gap-1 overflow-hidden rounded-xl border border-red-500/40 bg-red-500/15 px-3 py-2 shadow-[0_0_15px_rgba(239,68,68,0.25)] cursor-default">
+              <div className="absolute inset-0 bg-red-500/20 animate-pulse"></div>
+              <div className="relative flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                </span>
+                <span className="text-[11px] font-bold text-red-400 tracking-wide">LIMIT TERDETEKSI</span>
+              </div>
+              <span className="relative pl-5 text-[10px] font-medium text-red-200 line-clamp-1">
+                {driveLimit.email || 'Workspace dibatasi'}
+              </span>
+            </div>
+          ) : (
+            <div className="flex w-full items-center gap-2.5 rounded-xl border border-[#10b981]/20 bg-[#10b981]/10 px-3 py-2.5 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
+              <span className="relative flex h-2 w-2 items-center justify-center">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#10b981] opacity-40"></span>
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#10b981]"></span>
+              </span>
+              <span className="text-[11px] font-semibold text-[#10b981] tracking-wide">Cloud Aktif & Aman</span>
+            </div>
+          )}
         </div>
+
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hi)] text-[12px] font-extrabold text-white">
             A
