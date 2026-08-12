@@ -75,7 +75,11 @@ export default function TopBar({ title, backHref }) {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
               </span>
               <span className="relative hidden text-[11px] font-bold text-red-400 sm:inline tracking-wide">
-                LIMIT: <span className="text-white">{driveLimit.email || 'Workspace'}</span>
+                LIMIT: <span className="text-white">
+                  {driveLimit.limited?.length > 1
+                    ? `${driveLimit.email} + ${driveLimit.limited.length - 1} lainnya`
+                    : (driveLimit.email || 'Workspace')}
+                </span>
               </span>
             </div>
           ) : (

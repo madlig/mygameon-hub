@@ -14,6 +14,7 @@ import {
   Search,
   ShieldX,
   Sparkles,
+  HardDrive
 } from 'lucide-react'
 
 const navGroups = [
@@ -35,7 +36,10 @@ const navGroups = [
   },
   {
     label: 'Lainnya',
-    items: [{ href: '/log', icon: Clock, label: 'Log & history' }],
+    items: [
+      { href: '/drive-status', icon: HardDrive, label: 'Status Drive' },
+      { href: '/log', icon: Clock, label: 'Log & history' }
+    ],
   },
 ]
 
@@ -140,7 +144,9 @@ export default function Sidebar() {
                 <span className="text-[11px] font-bold text-red-400 tracking-wide">LIMIT TERDETEKSI</span>
               </div>
               <span className="relative pl-5 text-[10px] font-medium text-red-200 line-clamp-1">
-                {driveLimit.email || 'Workspace dibatasi'}
+                {driveLimit.limited?.length > 1
+                  ? `${driveLimit.email} + ${driveLimit.limited.length - 1} lainnya`
+                  : (driveLimit.email || 'Workspace dibatasi')}
               </span>
             </div>
           ) : (
