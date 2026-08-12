@@ -28,6 +28,28 @@ export async function GET() {
       })
     }
 
+    // NEW: Check Download Limit (Bandwidth) by trying to read 1 byte of 1 file
+    try {
+      const listRes = await drive.files.list({ pageSize: 1, fields: 'files(id)' })
+      if (listRes.data.files && listRes.data.files.length > 0) {
+        const testFileId = listRes.data.files[0].id
+        await drive.files.get(
+          { fileId: testFileId, alt: 'media' },
+          { headers: { Range: 'bytes=0-0' } }
+        )
+      }
+    } catch (downloadErr) {
+      const dReason = downloadErr.errors?.[0]?.reason || downloadErr.message || ''
+      if (dReason.toLowerCase().includes('downloadquota') || dReason.toLowerCase().includes('quota')) {
+        return NextResponse.json({
+          status: 'limit',
+          reason: 'Download Quota Exceeded (Bandwidth Limit)',
+          email,
+        })
+      }
+      // if it's another error (like file not readable), we ignore and assume ok
+    }
+
     return NextResponse.json({
       status: 'ok',
       email,
