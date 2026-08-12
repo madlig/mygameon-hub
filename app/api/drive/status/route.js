@@ -19,17 +19,24 @@ async function discoverWorkspaces(drive, folderId) {
   isDiscovering = true
   try {
     const listRes = await drive.files.list({
-      q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
+      // Do NOT restrict to shortcuts only, because files might be real files!
+      // But exclude folders so we don't accidentally test download quota on a folder.
+      q: `'${folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false`,
       pageSize: 150,
       orderBy: 'createdTime desc',
-      fields: 'files(shortcutDetails/targetId)',
+      fields: 'files(id, mimeType, shortcutDetails/targetId)',
       supportsAllDrives: true,
       includeItemsFromAllDrives: true,
     })
 
-    const targetIds = listRes.data.files
-      ?.map(f => f.shortcutDetails?.targetId)
-      .filter(Boolean) || []
+    const files = listRes.data.files || []
+    
+    // Resolve target IDs (if shortcut, get targetId, else use its own id)
+    const targetIds = files.map(f => 
+      f.mimeType === 'application/vnd.google-apps.shortcut' && f.shortcutDetails 
+        ? f.shortcutDetails.targetId 
+        : f.id
+    ).filter(Boolean)
 
     for (const targetId of targetIds) {
       try {
@@ -68,8 +75,8 @@ export async function GET() {
       discoverWorkspaces(drive, folderId)
     }
 
-    // Return cached result if checked within the last 3 minutes
-    if (Date.now() - limitCache.lastCheck < 3 * 60 * 1000) {
+    // Return cached result if checked within the last 15 seconds (reduced for testing)
+    if (Date.now() - limitCache.lastCheck < 15 * 1000) {
       if (limitCache.status === 'limit') {
         return NextResponse.json({
           status: 'limit',
@@ -77,8 +84,6 @@ export async function GET() {
           email: limitCache.email
         })
       }
-      // If ok, we can fall through and re-check if we have knownWorkspaces,
-      // but to save API calls, let's just return OK if we recently checked and it was OK.
       return NextResponse.json({ status: 'ok', email: adminEmail })
     }
 
@@ -92,13 +97,17 @@ export async function GET() {
     let idsToTest = testFileIds
     if (idsToTest.length === 0) {
       const listRes = await drive.files.list({
-        q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
+        q: `'${folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false`,
         pageSize: 5,
-        fields: 'files(shortcutDetails/targetId)',
+        fields: 'files(id, mimeType, shortcutDetails/targetId)',
         supportsAllDrives: true,
         includeItemsFromAllDrives: true,
       })
-      idsToTest = listRes.data.files?.map(f => f.shortcutDetails?.targetId).filter(Boolean) || []
+      idsToTest = listRes.data.files?.map(f => 
+        f.mimeType === 'application/vnd.google-apps.shortcut' && f.shortcutDetails 
+          ? f.shortcutDetails.targetId 
+          : f.id
+      ).filter(Boolean) || []
     }
 
     if (idsToTest.length > 0) {
