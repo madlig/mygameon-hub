@@ -22,7 +22,9 @@ async function discoverWorkspaces(drive, folderId) {
       q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
       pageSize: 150,
       orderBy: 'createdTime desc',
-      fields: 'files(shortcutDetails/targetId)'
+      fields: 'files(shortcutDetails/targetId)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     })
 
     const targetIds = listRes.data.files
@@ -92,7 +94,9 @@ export async function GET() {
       const listRes = await drive.files.list({
         q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
         pageSize: 5,
-        fields: 'files(shortcutDetails/targetId)'
+        fields: 'files(shortcutDetails/targetId)',
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
       })
       idsToTest = listRes.data.files?.map(f => f.shortcutDetails?.targetId).filter(Boolean) || []
     }
