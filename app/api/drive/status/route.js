@@ -1,82 +1,104 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
 
+// Cache to avoid spamming Google Drive API
+let limitCache = {
+  status: 'ok', // 'ok' or 'limit'
+  email: '',
+  reason: '',
+  lastCheck: 0
+}
+
 export async function GET() {
   try {
     const { drive, session } = await getGoogleClients()
-    const email = session?.user?.email || 'Unknown'
+    const adminEmail = session?.user?.email || 'Unknown'
 
-    // Try to get quota and user info
-    const res = await drive.about.get({ fields: 'user, storageQuota' })
-    const quota = res.data.storageQuota
-
-    let isStorageLimit = false
-    if (quota && quota.limit) {
-      // Check if usage is >= limit
-      const usage = BigInt(quota.usage || 0)
-      const limit = BigInt(quota.limit)
-      if (usage >= limit) {
-        isStorageLimit = true
-      }
-    }
-
-    if (isStorageLimit) {
-      return NextResponse.json({
-        status: 'limit',
-        reason: 'Storage Quota Exceeded',
-        email,
-      })
-    }
-
-    // NEW: Check Download Limit (Bandwidth) by trying to read 1 byte of 1 file
-    try {
-      const listRes = await drive.files.list({
-        pageSize: 1,
-        fields: 'files(id)',
-        q: "mimeType != 'application/vnd.google-apps.folder' and mimeType != 'application/vnd.google-apps.document' and mimeType != 'application/vnd.google-apps.spreadsheet'"
-      })
-      if (listRes.data.files && listRes.data.files.length > 0) {
-        const testFileId = listRes.data.files[0].id
-        await drive.files.get(
-          { fileId: testFileId, alt: 'media' },
-          { headers: { Range: 'bytes=0-0' } }
-        )
-      }
-    } catch (downloadErr) {
-      const dReason = downloadErr.errors?.[0]?.reason || downloadErr.message || ''
-      if (dReason.toLowerCase().includes('downloadquota') || dReason.toLowerCase().includes('quota')) {
+    // Return cached result if checked within the last 5 minutes
+    if (Date.now() - limitCache.lastCheck < 5 * 60 * 1000) {
+      if (limitCache.status === 'limit') {
         return NextResponse.json({
           status: 'limit',
-          reason: 'Download Quota Exceeded (Bandwidth Limit)',
-          email,
+          reason: limitCache.reason,
+          email: limitCache.email
         })
+      } else {
+        return NextResponse.json({ status: 'ok', email: adminEmail })
       }
-      // if it's another error (like file not readable), we ignore and assume ok
     }
 
-    return NextResponse.json({
-      status: 'ok',
-      email,
-      quota,
+    const folderId = process.env.GDRIVE_FOLDER_ID
+    if (!folderId) return NextResponse.json({ status: 'ok', email: adminEmail })
+
+    // 1. Get 10 recent shortcuts from the main folder
+    const listRes = await drive.files.list({
+      q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.shortcut' and trashed=false`,
+      pageSize: 10,
+      fields: 'files(shortcutDetails/targetId)'
     })
+
+    const targetIds = listRes.data.files
+      ?.map(f => f.shortcutDetails?.targetId)
+      .filter(Boolean) || []
+
+    let limitedEmail = null
+    let limitedReason = ''
+
+    // 2. Test 1-byte download on all 10 target files in parallel
+    if (targetIds.length > 0) {
+      const downloadPromises = targetIds.map(targetId =>
+        drive.files.get(
+          { fileId: targetId, alt: 'media' },
+          { headers: { Range: 'bytes=0-0' } }
+        ).catch(err => ({ error: err, targetId })) // catch and return error object
+      )
+
+      const results = await Promise.all(downloadPromises)
+
+      for (const res of results) {
+        if (res && res.error) {
+          const dReason = res.error.errors?.[0]?.reason || res.error.message || ''
+          if (dReason.toLowerCase().includes('downloadquota') || dReason.toLowerCase().includes('quota')) {
+            // Found a limited file! Let's get its owner.
+            try {
+              const fileInfo = await drive.files.get({
+                fileId: res.targetId,
+                fields: 'owners',
+                supportsAllDrives: true
+              })
+              limitedEmail = fileInfo.data.owners?.[0]?.emailAddress || 'Unknown Workspace'
+              limitedReason = 'Download Quota Exceeded (Bandwidth Limit)'
+              break // Stop checking others
+            } catch (ownerErr) {
+              limitedEmail = 'Unknown Workspace'
+              limitedReason = 'Download Quota Exceeded (Bandwidth Limit)'
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // Update Cache
+    limitCache.lastCheck = Date.now()
+    if (limitedEmail) {
+      limitCache.status = 'limit'
+      limitCache.email = limitedEmail
+      limitCache.reason = limitedReason
+      return NextResponse.json({
+        status: 'limit',
+        reason: limitedReason,
+        email: limitedEmail
+      })
+    } else {
+      limitCache.status = 'ok'
+      limitCache.email = ''
+      limitCache.reason = ''
+      return NextResponse.json({ status: 'ok', email: adminEmail })
+    }
 
   } catch (error) {
     console.error('Drive status error:', error)
-    const email = error.response?.config?.data ? 'Unknown' : 'Workspace Email'
-    const reasonStr = error.errors?.[0]?.reason || error.message || ''
-
-    if (reasonStr.toLowerCase().includes('ratelimit') || reasonStr.toLowerCase().includes('quota')) {
-      return NextResponse.json({
-        status: 'limit',
-        reason: 'Rate Limit / Quota Exceeded',
-        email,
-        details: reasonStr
-      })
-    }
-
-    return NextResponse.json({
-      status: 'error',
-      reason: error.message,
-    }, { status: 500 })
+    return NextResponse.json({ status: 'error', reason: error.message }, { status: 500 })
   }
 }
