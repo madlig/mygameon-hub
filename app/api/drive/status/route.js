@@ -51,7 +51,7 @@ export async function GET() {
     const fileResults = await probeFilesBatched(drive, allItems, { chunkSize: 8, maxRetries: 2 })
 
     // 5. AGGREGATE PER OWNER
-    const { limited, workspaces } = aggregateByOwner(fileResults, ownerCache)
+    const { limited, workspaces, debugErrors } = aggregateByOwner(fileResults, ownerCache)
 
     // 6. PERSIST TRANSITIONS TO SHEET
     const prevLimited = lastResult?.limited || []
@@ -69,6 +69,7 @@ export async function GET() {
       // New rich fields
       limited,
       workspaces,
+      debugErrors,
       fileCount: allItems.length
     }
 
