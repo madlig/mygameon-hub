@@ -33,13 +33,13 @@ export default function TopBar({ title, backHref }) {
 
   return (
     <header
-      className="sticky top-0 z-30 -mx-[var(--pad-card)] -mt-[var(--pad-card)] mb-5 border-b border-[var(--border-soft)] px-[var(--pad-card)] py-3 backdrop-blur-xl"
-      style={{ background: 'rgba(10,11,15,0.82)' }}
+      className="sticky top-0 z-30 -mx-[var(--pad-card)] -mt-[var(--pad-card)] mb-5 border-b border-[var(--border-soft)] px-[var(--pad-card)] py-3 backdrop-blur-xl flex items-center pr-[140px]"
+      style={{ background: 'rgba(10,11,15,0.82)', WebkitAppRegion: 'drag' }}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex w-full items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {backHref && (
-            <Link href={backHref} className="pressable shrink-0 text-[var(--text-2)] transition-colors hover:text-[var(--text)]">
+            <Link href={backHref} style={{ WebkitAppRegion: 'no-drag' }} className="pressable shrink-0 text-[var(--text-2)] transition-colors hover:text-[var(--text)]">
               <ArrowLeft size={18} />
             </Link>
           )}
@@ -93,6 +93,7 @@ export default function TopBar({ title, backHref }) {
           )}
 
           <button
+            style={{ WebkitAppRegion: 'no-drag' }}
             onClick={() => signOut({ callbackUrl: '/login' })}
             className="pressable flex h-8 w-8 items-center justify-center rounded-lg border border-transparent text-[var(--text-3)] transition-all hover:border-[var(--danger)]/30 hover:bg-[var(--danger)]/10 hover:text-[var(--danger)] md:hidden"
             title="Logout"

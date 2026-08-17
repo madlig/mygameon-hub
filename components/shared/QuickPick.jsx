@@ -11,7 +11,7 @@ function GameChip({ item, inCart, onAdd, trailing }) {
     >
       <button onClick={onAdd} className="flex min-w-0 flex-1 items-center gap-2 text-left" title={inCart ? 'Sudah di keranjang' : 'Tambah ke keranjang'}>
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--elevated)] text-[var(--text-3)]">
-          {item.isShortcut ? <Link2 size={13} /> : <FileBox size={13} />}
+          <FileBox size={13} />
         </span>
         <span className="truncate text-[12.5px] font-semibold text-[var(--text)]">{item.name}</span>
         {inCart ? (

@@ -63,11 +63,13 @@ export default function CheckoutBody({
         {cart.map(item => (
           <div key={item.id} className="flex items-center gap-2.5 rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-3 py-2">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface)] text-[var(--text-3)]">
-              {item.isShortcut ? <Link2 size={13} /> : <FileBox size={13} />}
+              <FileBox size={13} />
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-[var(--text)]">{item.name}</p>
-              <p className="mono text-[10px] text-[var(--text-3)]">{item.isShortcut ? 'shortcut' : 'file'}</p>
+              <p className="mono truncate text-[10px] text-[var(--text-3)]">
+                {item.availableIn > 1 ? `Tersedia di ${item.availableIn} Workspace` : (item.ownerEmail || 'folder')}
+              </p>
             </div>
             <button onClick={() => onRemove(item.id)} className="shrink-0 text-[var(--text-3)] transition-colors hover:text-[var(--danger)]" title="Hapus">
               <X size={15} />

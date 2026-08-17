@@ -1,50 +1,72 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
+import connectToDatabase from '@/lib/db'
+import GameCatalog from '@/models/GameCatalog'
+
+function fmtSize(bytes) {
+  if (!bytes) return ''
+  const kb = bytes / 1024
+  if (kb < 1024) return `${kb.toFixed(1)} KB`
+  const mb = kb / 1024
+  if (mb < 1024) return `${mb.toFixed(2)} MB`
+  return `${(mb / 1024).toFixed(2)} GB`
+}
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const keyword = searchParams.get('q')
 
-    if (!keyword || keyword.trim().length < 2) {
-      return NextResponse.json({ results: [] })
+    const page = parseInt(searchParams.get('page')) || 1
+    const limit = parseInt(searchParams.get('limit')) || 30
+    const skip = (page - 1) * limit
+
+    // Auth check
+    const { session } = await getGoogleClients()
+
+    await connectToDatabase()
+    
+    const pipeline = []
+
+    if (keyword && keyword.trim().length >= 2) {
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      pipeline.push({ $match: { name: { $regex: escapedKeyword, $options: 'i' } } })
     }
 
-    const { drive } = await getGoogleClients()
+    pipeline.push(
+      { $sort: { name: 1 } },
+      { $group: {
+          _id: { $toLower: "$name" },
+          name: { $first: "$name" },
+          size: { $first: "$size" },
+          totalFiles: { $first: "$totalFiles" },
+          sources: { $push: { folderId: "$folderId", ownerEmail: "$ownerEmail", sendCount: { $ifNull: ["$sendCount", 0] } } }
+        }
+      },
+      { $sort: { name: 1 } },
+      { $skip: skip },
+      { $limit: limit }
+    )
 
-    const folderId = process.env.GDRIVE_FOLDER_ID
-    const q = `'${folderId}' in parents and name contains '${keyword.replace(/'/g, "\\'")}' and trashed = false`
+    const groupedGames = await GameCatalog.aggregate(pipeline)
 
-    const response = await drive.files.list({
-      q,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      pageSize: 100,
-      fields: 'files(id, name, mimeType, shortcutDetails)',
+    const results = groupedGames.map(g => {
+      // Sort sources by sendCount
+      g.sources.sort((a, b) => a.sendCount - b.sendCount)
+      return {
+        id: g.name,
+        name: g.name,
+        size: fmtSize(g.size),
+        totalFiles: g.totalFiles,
+        mimeType: 'application/vnd.google-apps.folder',
+        isShortcut: false,
+        sources: g.sources,
+        ownerEmail: g.sources.map(s => s.ownerEmail).join(', '),
+        availableIn: g.sources.length
+      }
     })
 
-    const files = response.data.files || []
-
-    // Deduplikasi berdasarkan nama (exact, case-insensitive)
-    const seen = new Set()
-    const unique = files.filter(f => {
-      const key = f.name.toLowerCase()
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-
-    // Resolve shortcut — simpan ID shortcut sebagai referensi,
-    // tapi kita perlu ID asli untuk share permission nanti
-    const results = unique.map(f => ({
-      id: f.id, // ID yang disimpan di cart (shortcut ID)
-      name: f.name,
-      mimeType: f.mimeType,
-      isShortcut: f.mimeType === 'application/vnd.google-apps.shortcut',
-      targetId: f.shortcutDetails?.targetId || f.id,
-    }))
-
-    return NextResponse.json({ results })
+    return NextResponse.json({ results, page, hasMore: results.length === limit })
 
   } catch (err) {
     if (err.message === 'Unauthorized') {

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
+import { getClientForEmail } from '@/lib/googleClient'
+import connectToDatabase from '@/lib/db'
+import GameCatalog from '@/models/GameCatalog'
 
 export async function POST(request) {
   try {
@@ -9,73 +12,79 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Email dan cart wajib diisi' }, { status: 400 })
     }
 
-    const { drive, gmail, sheets } = await getGoogleClients()
-    const folderId = process.env.GDRIVE_FOLDER_ID
+    // Admin clients: untuk Gmail (kirim email) dan Sheets (log)
+    const { drive: adminDrive, gmail, sheets } = await getGoogleClients()
     const sheetId = process.env.GSHEET_ID
     const report = []
     const successItems = []
 
+    await connectToDatabase()
+
     for (const item of cart) {
       try {
-        const q = `'${folderId}' in parents and name = '${item.name.replace(/'/g, "\\'")}' and trashed = false`
-        const searchRes = await drive.files.list({
-          q,
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true,
-          pageSize: 100,
-          fields: 'files(id, name, mimeType, shortcutDetails)',
-        })
+        // Cari semua opsi workspace dari katalog untuk game ini (urutkan dari sendCount terkecil)
+        const catalogEntries = await GameCatalog.find({ name: item.name }).sort({ sendCount: 1 }).lean()
+        
+        let driveForShare = null
+        let ownerEmail = null
+        let realId = null
+        let permissionId = null
+        let successEntry = null
 
-        const matches = searchRes.data.files || []
-        if (matches.length === 0) {
-          report.push({ name: item.name, status: 'error', message: 'File tidak ditemukan' })
-          continue
-        }
-
-        const picked = matches[Math.floor(Math.random() * matches.length)]
-        let realId = picked.id
-        if (picked.mimeType === 'application/vnd.google-apps.shortcut' && picked.shortcutDetails) {
-          realId = picked.shortcutDetails.targetId
-        }
-
-        // Share akses — tanpa expiration (tidak support di Shared Drive)
-        const permRes = await drive.permissions.create({
-          fileId: realId,
-          supportsAllDrives: true,
-          sendNotificationEmail: false,
-          requestBody: {
-            role: 'reader',
-            type: 'user',
-            emailAddress: email,
-          },
-        })
-
-        const permissionId = permRes.data.id
-
-        // Log ke Sheet1 (log umum)
-        try {
-          let ownerEmail = 'Unknown'
+        // Coba kirim dari workspace yang beban pengirimannya paling sedikit
+        for (const entry of catalogEntries) {
           try {
-            const fileInfo = await drive.files.get({
-              fileId: realId,
-              fields: 'owners',
+            const drive = await getClientForEmail(entry.ownerEmail)
+            const permRes = await drive.permissions.create({
+              fileId: entry.folderId,
               supportsAllDrives: true,
+              sendNotificationEmail: false,
+              requestBody: { role: 'reader', type: 'user', emailAddress: email },
             })
-            if (fileInfo.data.owners?.length > 0) {
-              ownerEmail = fileInfo.data.owners[0].emailAddress
-            }
+            // Berhasil!
+            driveForShare = drive
+            ownerEmail = entry.ownerEmail
+            realId = entry.folderId
+            permissionId = permRes.data.id
+            successEntry = entry
+            break // Keluar dari loop jika sukses
           } catch (e) {
-            ownerEmail = 'Hidden'
+            console.error(`Gagal menggunakan workspace ${entry.ownerEmail} untuk ${item.name}: ${e.message}`)
+            // Lanjut ke workspace berikutnya jika yang ini gagal (misal kena rate limit)
           }
+        }
 
+        // Jika semua workspace gagal, atau tidak ada di katalog, fallback ke id bawaan (menggunakan token admin)
+        if (!driveForShare) {
+          console.warn(`Semua workspace gagal untuk ${item.name}, menggunakan fallback admin.`)
+          realId = item.targetId || item.id
+          ownerEmail = item.ownerEmail || 'Unknown'
+          
+          if (!realId) throw new Error('Game tidak ditemukan di katalog dan tidak ada fallback ID')
+
+          const permRes = await adminDrive.permissions.create({
+            fileId: realId,
+            supportsAllDrives: true,
+            sendNotificationEmail: false,
+            requestBody: { role: 'reader', type: 'user', emailAddress: email },
+          })
+          permissionId = permRes.data.id
+        } else if (successEntry) {
+          // Jika sukses melalui workspace, tambahkan counter pengiriman
+          await GameCatalog.updateOne(
+            { _id: successEntry._id },
+            { $inc: { sendCount: 1 } }
+          )
+        }
+
+        // Log ke Sheet1 (tetap menggunakan admin sheets)
+        try {
           await sheets.spreadsheets.values.append({
             spreadsheetId: sheetId,
             range: 'Sheet1!A:E',
             valueInputOption: 'RAW',
             requestBody: {
-              // Kolom E = penanda 'bonus' (tidak dihitung di dashboard);
-              // bonus terkait pesanan yang sudah dibuat sebelumnya.
-              values: [[new Date().toISOString(), email, item.name, ownerEmail, isBonus ? 'bonus' : '']],
+              values: [[new Date().toISOString(), email, item.name, ownerEmail || 'Unknown', isBonus ? 'bonus' : '']],
             },
           })
         } catch (e) {
@@ -113,6 +122,7 @@ export async function POST(request) {
       }
     }
 
+    // Kirim email konfirmasi dari akun admin
     if (successItems.length > 0) {
       try {
         await sendPurchaseEmail(gmail, email, successItems)

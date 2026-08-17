@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getGoogleClients } from '@/lib/googleClient'
+import { getGoogleClients, getClientForEmail } from '@/lib/googleClient'
 import { parseSheetDate } from '@/lib/utils'
+import connectToDatabase from '@/lib/db'
+import WorkspaceAccount from '@/models/WorkspaceAccount'
+import GameCatalog from '@/models/GameCatalog'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
@@ -14,25 +17,58 @@ export async function GET(request) {
 
     const emailLower = email.toLowerCase()
     const safeEmail = email.replace(/'/g, "\\'") // cegah query injection
-    const { drive, sheets } = await getGoogleClients()
+    
+    // Admin client untuk Sheets (konteks log)
+    const { sheets } = await getGoogleClients()
 
-    // Scan Drive (paginated) + baca sheet konteks paralel
+    await connectToDatabase()
+    
+    // Ambil semua workspace yang aktif
+    const accounts = await WorkspaceAccount.find({ status: 'active' })
+
+    // Scan setiap workspace secara paralel untuk mencari permissions email customer
     const drivePromise = (async () => {
-      const files = []
-      let pageToken
-      do {
-        const res = await drive.files.list({
-          q: `'${safeEmail}' in readers and mimeType = '${FOLDER_MIME}' and trashed = false`,
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true,
-          pageSize: 100,
-          pageToken,
-          fields: 'nextPageToken, files(id, name, permissions(id, emailAddress))',
-        })
-        for (const f of res.data.files || []) files.push(f)
-        pageToken = res.data.nextPageToken
-      } while (pageToken)
-      return files
+      const allFiles = []
+      
+      // Query untuk mencari folder asli atau shortcut lama
+      const query = `'${safeEmail}' in readers and (mimeType = '${FOLDER_MIME}' or mimeType = 'application/vnd.google-apps.shortcut') and trashed = false`
+
+      // Tambahkan adminDrive ke dalam daftar yang harus di-scan
+      const { drive: adminDrive, session } = await getGoogleClients()
+      const adminEmail = session?.user?.email || 'admin'
+
+      const scanDrive = async (driveClient, ownerEmail) => {
+        let pageToken
+        do {
+          const res = await driveClient.files.list({
+            q: query,
+            pageSize: 100,
+            pageToken,
+            fields: 'nextPageToken, files(id, name, permissions(id, emailAddress))',
+          })
+          for (const f of res.data.files || []) {
+            f._ownerEmail = ownerEmail
+            allFiles.push(f)
+          }
+          pageToken = res.data.nextPageToken
+        } while (pageToken)
+      }
+
+      const promises = accounts.map(async (acc) => {
+        try {
+          const drive = await getClientForEmail(acc.email)
+          await scanDrive(drive, acc.email)
+        } catch (e) {
+          console.error(`Revoke scan error for ${acc.email}:`, e.message)
+        }
+      })
+
+      // Scan admin drive juga
+      promises.push(scanDrive(adminDrive, adminEmail).catch(e => console.error('Admin drive scan error:', e.message)))
+
+      await Promise.all(promises)
+      
+      return allFiles
     })()
 
     const sheetPromise = (async () => {
@@ -48,6 +84,14 @@ export async function GET(request) {
     })()
 
     const [files, sheetData] = await Promise.all([drivePromise, sheetPromise])
+
+    // Deduplikasi: jika file yang sama terdeteksi dari beberapa workspace, ambil yang pertama
+    const seenFileIds = new Set()
+    const uniqueFiles = files.filter(f => {
+      if (seenFileIds.has(f.id)) return false
+      seenFileIds.add(f.id)
+      return true
+    })
 
     // Map kapan diberikan: email|namaFolder -> grantedAt (ISO terbaru)
     const grantedMap = new Map()
@@ -71,7 +115,7 @@ export async function GET(request) {
     }
 
     const accessList = []
-    for (const file of files) {
+    for (const file of uniqueFiles) {
       if (!file.permissions) continue
       const perm = file.permissions.find(p => p.emailAddress?.toLowerCase() === emailLower)
       if (!perm) continue
@@ -80,6 +124,7 @@ export async function GET(request) {
         fileId: file.id,
         fileName: file.name,
         permissionId: perm.id,
+        ownerEmail: file._ownerEmail, // BARU: workspace pemilik
         grantedAt: grantedMap.get(`${emailLower}|${(file.name || '').toLowerCase()}`) || null,
         expiresAt: exp?.expiresAt || null,
         tracked: !!exp,
@@ -104,7 +149,8 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'Tidak ada akses yang dipilih' }, { status: 400 })
     }
 
-    const { drive, sheets } = await getGoogleClients()
+    const { sheets } = await getGoogleClients()
+    await connectToDatabase()
 
     const results = []
     for (const item of items) {
@@ -113,6 +159,27 @@ export async function DELETE(request) {
         continue
       }
       try {
+        // Gunakan workspace pemilik untuk revoke
+        let drive
+        if (item.ownerEmail === 'admin' || !item.ownerEmail) {
+          const clients = await getGoogleClients()
+          drive = clients.drive
+        } else {
+          try {
+            drive = await getClientForEmail(item.ownerEmail)
+          } catch (e) {
+            // Fallback: cari di katalog
+            const game = await GameCatalog.findOne({ folderId: item.fileId }).lean()
+            if (game?.ownerEmail) {
+              drive = await getClientForEmail(game.ownerEmail)
+            } else {
+              const clients = await getGoogleClients()
+              drive = clients.drive
+            }
+          }
+
+        }
+
         await drive.permissions.delete({
           fileId: item.fileId,
           permissionId: item.permissionId,

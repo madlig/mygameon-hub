@@ -14,7 +14,8 @@ import {
   Search,
   ShieldX,
   Sparkles,
-  HardDrive
+  HardDrive,
+  Settings
 } from 'lucide-react'
 
 const navGroups = [
@@ -24,7 +25,6 @@ const navGroups = [
       { href: '/', icon: Grid2X2, label: 'Dashboard' },
       { href: '/search', icon: Search, label: 'Cari game' },
       { href: '/revoke', icon: ShieldX, label: 'Revoke akses' },
-      { href: '/check', icon: Folder, label: 'Cek file' },
     ],
   },
   {
@@ -37,7 +37,9 @@ const navGroups = [
   {
     label: 'Lainnya',
     items: [
-      { href: '/drive-status', icon: HardDrive, label: 'Status Drive' },
+      { href: '/studio', icon: HardDrive, label: 'Upload Studio' },
+      { href: '/drive-status', icon: Settings, label: 'Status Drive' },
+      { href: '/accounts', icon: Settings, label: 'Kelola Akun' },
       { href: '/log', icon: Clock, label: 'Log & history' }
     ],
   },

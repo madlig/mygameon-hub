@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getGoogleClients } from '@/lib/googleClient'
+import { getGoogleClients, getClientForEmail } from '@/lib/googleClient'
+import connectToDatabase from '@/lib/db'
+import GameCatalog from '@/models/GameCatalog'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const FILE_LIST_CAP = 300 // batas nama file per folder yang dikirim ke client
@@ -71,7 +73,25 @@ export async function GET(request) {
       return NextResponse.json({ error: 'File ID wajib diisi' }, { status: 400 })
     }
 
-    const { drive } = await getGoogleClients()
+    // Cari workspace pemilik game dari katalog
+    await connectToDatabase()
+    const game = await GameCatalog.findOne({ folderId: fileId }).lean()
+
+    let drive
+    if (game?.ownerEmail) {
+      try {
+        drive = await getClientForEmail(game.ownerEmail)
+      } catch (e) {
+        // Fallback ke admin jika token workspace bermasalah
+        console.error(`Check fallback to admin for ${game.name}: ${e.message}`)
+        const clients = await getGoogleClients()
+        drive = clients.drive
+      }
+    } else {
+      // Fallback: game tidak ada di katalog, gunakan admin
+      const clients = await getGoogleClients()
+      drive = clients.drive
+    }
 
     const fileRes = await drive.files.get({
       fileId,
@@ -98,6 +118,15 @@ export async function GET(request) {
     const root = pack(rootFiles)
     const totalBytes = root.bytes + subfolders.reduce((s, sf) => s + sf.bytes, 0)
     const totalCount = root.count + subfolders.reduce((s, sf) => s + sf.count, 0)
+
+    // Simpan informasi yang telah dicek ke database untuk semua workspace yang punya game ini
+    // Dengan ini, query selanjutnya tidak perlu hit GDrive lagi
+    if (game && game.name) {
+      await GameCatalog.updateMany(
+        { name: game.name },
+        { $set: { fileCount: totalCount, totalSize: totalBytes } }
+      )
+    }
 
     return NextResponse.json({
       name: file.name,
