@@ -114,35 +114,7 @@ function WorkspaceRow({ ws, onCopy }) {
                 </div>
               </div>
 
-              {ws.allFiles && (
-                <>
-                  <h4 className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider mb-3">Daftar Game:</h4>
-                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {ws.allFiles.map(file => (
-                      <li key={file.id} className="flex items-center justify-between bg-[var(--surface)] border border-[var(--border-soft)] rounded-lg px-3 py-2">
-                        <div className="flex flex-col overflow-hidden">
-                          <span className="text-sm font-medium text-[var(--text)] truncate">{file.name}</span>
-                          <span className="text-xs text-[var(--text-3)] truncate">
-                            {file.status === 'download_limit' ? 'Limit Kuota' : 'Aman'}
-                          </span>
-                        </div>
-                        {file.status === 'download_limit' && (
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onCopy(file, ws.email);
-                            }}
-                            className="flex items-center gap-1 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                          >
-                            <Copy size={14} />
-                            Auto-Copy
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
+
             </div>
           </td>
         </tr>

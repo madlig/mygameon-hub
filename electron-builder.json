@@ -8,6 +8,7 @@
   },
   "files": [
     "main.js",
+    "preload.js",
     "package.json",
     ".next/standalone/**/*",
     "public/**/*",
