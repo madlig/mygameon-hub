@@ -1,0 +1,32 @@
+name: Build and Release Electron App
+
+on:
+  push:
+    tags:
+      - 'v*' # Memicu aksi saat tag vX.Y.Z dipush ke GitHub
+
+jobs:
+  release:
+    runs-on: windows-latest
+    
+    permissions:
+      contents: write # Dibutuhkan untuk membuat dan mengunggah ke GitHub Releases
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build and Publish Electron App
+        run: npm run build:electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Kita tidak memberikan .env.local, karena next.js tidak membutuhkannya 
+          # saat build Standalone, dan GH_TOKEN disuntikkan secara aman oleh GitHub.

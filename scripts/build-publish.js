@@ -25,12 +25,19 @@ if (fs.existsSync(envPath)) {
 const env = { ...process.env };
 let commandArgs = [];
 
-if (ghToken) {
+if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) {
+  console.log('\x1b[32m%s\x1b[0m', '✅ GH_TOKEN ditemukan di Environment (CI/CD). Auto Publish diaktifkan!');
+  // electron-builder uses GH_TOKEN natively, if GITHUB_TOKEN is provided, map it
+  if (!process.env.GH_TOKEN && process.env.GITHUB_TOKEN) {
+    env.GH_TOKEN = process.env.GITHUB_TOKEN;
+  }
+  commandArgs = ['--publish', 'always'];
+} else if (ghToken) {
   console.log('\x1b[32m%s\x1b[0m', '✅ GH_TOKEN ditemukan di .env.local. Auto Publish diaktifkan!');
   env.GH_TOKEN = ghToken;
   commandArgs = ['--publish', 'always'];
 } else {
-  console.log('\x1b[33m%s\x1b[0m', '⚠️ GH_TOKEN tidak ditemukan di .env.local. Build akan berjalan tanpa Auto Publish.');
+  console.log('\x1b[33m%s\x1b[0m', '⚠️ GH_TOKEN tidak ditemukan di .env.local atau environment. Build berjalan tanpa Auto Publish.');
 }
 
 // Menjalankan electron-builder
