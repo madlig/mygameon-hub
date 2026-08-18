@@ -30,3 +30,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Kita tidak memberikan .env.local, karena next.js tidak membutuhkannya 
           # saat build Standalone, dan GH_TOKEN disuntikkan secara aman oleh GitHub.
+          
+      - name: Ensure Setup.exe is Uploaded to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/squirrel-windows/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
