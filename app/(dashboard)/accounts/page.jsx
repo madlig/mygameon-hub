@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, CheckCircle2, AlertCircle, RefreshCw, Loader2 } from 'lucide-react'
+import { Plus, Trash2, CheckCircle2, AlertCircle, RefreshCw, Loader2, Edit2 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 
 function timeAgo(iso) {
@@ -25,6 +25,8 @@ export default function AccountsPage() {
   const [syncMessage, setSyncMessage] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, email: null })
   const [isDeleting, setIsDeleting] = useState(false)
+  const [editModal, setEditModal] = useState({ isOpen: false, email: '', gameFolderId: '' })
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   const fetchAccounts = async () => {
     setLoading(true)
@@ -78,6 +80,33 @@ export default function AccountsPage() {
 
   const handleDeleteClick = (email) => {
     setDeleteConfirm({ isOpen: true, email })
+  }
+
+  const handleEditClick = (acc) => {
+    setEditModal({ isOpen: true, email: acc.email, gameFolderId: acc.gameFolderId || 'root' })
+  }
+
+  const saveEdit = async () => {
+    setIsSavingEdit(true)
+    try {
+      const res = await fetch('/api/accounts/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: editModal.email, gameFolderId: editModal.gameFolderId })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSyncMessage({ type: 'success', text: data.message })
+        fetchAccounts()
+        setEditModal({ isOpen: false, email: '', gameFolderId: '' })
+      } else {
+        setSyncMessage({ type: 'error', text: data.error || 'Gagal menyimpan perubahan' })
+      }
+    } catch (error) {
+      setSyncMessage({ type: 'error', text: 'Terjadi kesalahan sistem' })
+    } finally {
+      setIsSavingEdit(false)
+    }
   }
 
   const confirmDelete = async () => {
@@ -224,6 +253,13 @@ export default function AccountsPage() {
                         >
                           {syncingEmail === acc.email ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
                         </button>
+                        <button
+                          onClick={() => handleEditClick(acc)}
+                          className="rounded p-2 text-[var(--text-3)] hover:bg-[#f59e0b]/10 hover:text-[#f59e0b] transition-colors"
+                          title="Edit Target Folder ID"
+                        >
+                          <Edit2 size={16} />
+                        </button>
                         <button onClick={() => handleDeleteClick(acc.email)} className="rounded p-2 text-red-500 hover:bg-red-500/10 transition-colors" title="Hapus akun">
                           <Trash2 size={16} />
                         </button>
@@ -248,24 +284,65 @@ export default function AccountsPage() {
               <h3 className="text-lg font-semibold text-[var(--text)]">Hapus Workspace</h3>
             </div>
             <p className="mb-6 text-sm text-[var(--text-2)] leading-relaxed">
-              Yakin ingin menghapus akun <strong className="text-[var(--text)]">{deleteConfirm.email}</strong>? 
-              Semua game dari workspace ini juga akan dihapus dari hasil pencarian.
+              Apakah Anda yakin ingin menghapus <b>{deleteConfirm.email}</b>? Semua katalog game dari akun ini akan ikut dihapus dari database.
             </p>
-            <div className="flex gap-3 justify-end">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setDeleteConfirm({ isOpen: false, email: null })}
                 disabled={isDeleting}
-                className="rounded-xl border border-[var(--border-soft)] bg-transparent px-4 py-2 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--elevated)] disabled:opacity-50"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--elevated)] transition-colors disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={isDeleting}
-                className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600 disabled:opacity-50 shadow-lg shadow-red-500/20"
+                className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                Hapus
+                {isDeleting && <Loader2 size={16} className="animate-spin" />}
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Folder ID */}
+      {editModal.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] shadow-2xl p-6 transform transition-all">
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-[var(--text)]">Target Folder ID</h3>
+              <p className="text-sm text-[var(--text-2)] mt-1">Atur sumber folder sinkronisasi untuk <b>{editModal.email}</b>.</p>
+            </div>
+            <div className="mb-6">
+              <label className="block text-xs font-semibold text-[var(--text-2)] mb-2">FOLDER ID (Pisahkan dengan koma untuk multi-folder)</label>
+              <input
+                type="text"
+                value={editModal.gameFolderId}
+                onChange={(e) => setEditModal({ ...editModal, gameFolderId: e.target.value })}
+                className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-all"
+                placeholder="Contoh: root, 1mthLPfYB9amtp..."
+              />
+              <p className="mt-2 text-xs text-[var(--text-3)] leading-relaxed">
+                Biarkan berisi <code>root</code> untuk membaca <i>My Drive</i>. Untuk memasukkan <i>Shared Drive</i> KEBERSAMAAN, tambahkan koma lalu ID folder tersebut.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditModal({ isOpen: false, email: '', gameFolderId: '' })}
+                disabled={isSavingEdit}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--elevated)] transition-colors disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={isSavingEdit}
+                className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50"
+              >
+                {isSavingEdit && <Loader2 size={16} className="animate-spin" />}
+                Simpan
               </button>
             </div>
           </div>
