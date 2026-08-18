@@ -50,6 +50,9 @@ export async function POST(request) {
             break // Keluar dari loop jika sukses
           } catch (e) {
             console.error(`Gagal menggunakan workspace ${entry.ownerEmail} untuk ${item.name}: ${e.message}`)
+            if (e.message && (e.message.toLowerCase().includes('invalid') || e.message.toLowerCase().includes('bad request') || e.code === 400)) {
+              throw new Error(`Email tujuan salah atau tidak valid (${email})`)
+            }
             // Lanjut ke workspace berikutnya jika yang ini gagal (misal kena rate limit)
           }
         }
@@ -62,13 +65,22 @@ export async function POST(request) {
           
           if (!realId) throw new Error('Game tidak ditemukan di katalog dan tidak ada fallback ID')
 
-          const permRes = await adminDrive.permissions.create({
-            fileId: realId,
-            supportsAllDrives: true,
-            sendNotificationEmail: false,
-            requestBody: { role: 'reader', type: 'user', emailAddress: email },
-          })
-          permissionId = permRes.data.id
+          try {
+            const permRes = await adminDrive.permissions.create({
+              fileId: realId,
+              supportsAllDrives: true,
+              sendNotificationEmail: false,
+              requestBody: { role: 'reader', type: 'user', emailAddress: email },
+            })
+            permissionId = permRes.data.id
+          } catch (e) {
+            if (e.message && (e.message.toLowerCase().includes('invalid') || e.message.toLowerCase().includes('bad request') || e.code === 400)) {
+              throw new Error(`Email tujuan salah atau tidak valid (${email})`)
+            } else if (e.code === 404 || (e.message && e.message.toLowerCase().includes('not found'))) {
+              throw new Error(`Akses ditolak: File sumber (${realId}) tidak bisa diakses oleh sistem.`)
+            }
+            throw e
+          }
         } else if (successEntry) {
           // Jika sukses melalui workspace, tambahkan counter pengiriman
           await GameCatalog.updateOne(

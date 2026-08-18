@@ -36,6 +36,11 @@ export async function POST(request) {
             requestBody: { role: 'reader', type: 'user', emailAddress: targetEmail }
           })
         } catch (e) {
+          if (e.message && (e.message.toLowerCase().includes('invalid') || e.message.toLowerCase().includes('bad request') || e.code === 400)) {
+            sendProgress({ status: 'error', text: `Gagal: Email tujuan salah atau tidak valid (${targetEmail})` })
+            controller.close()
+            return
+          }
           // Abaikan jika sudah dibagikan sebelumnya
           console.warn('Share warning:', e.message)
         }

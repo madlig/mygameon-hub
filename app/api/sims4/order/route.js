@@ -129,6 +129,9 @@ export async function POST(request) {
     if (err.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    if (err.message && (err.message.toLowerCase().includes('invalid') || err.message.toLowerCase().includes('bad request') || err.code === 400)) {
+      return NextResponse.json({ error: 'Email tujuan salah atau tidak valid' }, { status: 400 })
+    }
     console.error('Sims4 order error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
