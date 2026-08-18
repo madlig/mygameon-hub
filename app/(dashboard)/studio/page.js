@@ -13,6 +13,7 @@ export default function StudioPage() {
   const [targetWorkspace, setTargetWorkspace] = useState(null)
   const [workspaces, setWorkspaces] = useState([])
   const [processState, setProcessState] = useState({ status: 'idle', progress: 0, text: '' })
+  const [isElectron, setIsElectron] = useState(true) // Default true to avoid flash, then check in useEffect
   
   // WinRAR Settings State
   const [rarConfig, setRarConfig] = useState({
@@ -24,6 +25,13 @@ export default function StudioPage() {
   })
 
   useEffect(() => {
+    // Cek apakah dijalankan di Electron atau Web Browser biasa (Vercel)
+    if (typeof window !== 'undefined' && !window.electronAPI) {
+      setIsElectron(false)
+      setLoading(false)
+      return
+    }
+
     fetchScan()
     fetchWorkspaces()
     
@@ -101,19 +109,19 @@ export default function StudioPage() {
     <div className="fadeUp pb-24 h-full flex flex-col">
       <TopBar title="Workspace Studio" />
 
-      {/* Mobile Warning */}
-      <div className="md:hidden flex flex-col items-center justify-center h-[60vh] text-center px-6">
-        <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-4">
-          <AlertCircle size={32} />
+      {/* Vercel / Web Browser Warning */}
+      {!isElectron ? (
+        <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
+          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-4">
+            <AlertCircle size={32} />
+          </div>
+          <h2 className="text-xl font-bold text-[var(--text)] mb-2">Desktop Version Only</h2>
+          <p className="text-sm text-[var(--text-3)] max-w-md">
+            Fitur Automasi Upload & Arsip beroperasi menggunakan Local Processor dan membutuhkan akses ke File System. Fitur ini hanya dapat diakses melalui perangkat Desktop/PC Anda menggunakan Aplikasi MyGameON.
+          </p>
         </div>
-        <h2 className="text-xl font-bold text-[var(--text)] mb-2">Desktop Only</h2>
-        <p className="text-sm text-[var(--text-3)]">
-          Fitur Automasi Upload & Arsip beroperasi menggunakan Local Processor dan hanya dapat diakses melalui perangkat Desktop/PC Anda.
-        </p>
-      </div>
-
-      {/* Desktop Interface */}
-      <div className="hidden md:flex flex-col flex-1 mt-6">
+      ) : (
+        <div className="flex flex-col flex-1 mt-6">
         <div className="mb-6 flex items-end justify-between">
             <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-3)]">Automasi Arsip & Upload</p>
@@ -209,6 +217,17 @@ export default function StudioPage() {
                                             </div>
                                             <div className="text-left flex-1 min-w-0">
                                                 <div className={`truncate text-sm font-bold ${targetWorkspace?.email === ws.email ? 'text-blue-400' : 'text-[var(--text)]'}`}>{ws.email}</div>
+                                                {ws.storage && (
+                                                    <div className="mt-1.5 flex items-center gap-2">
+                                                        <div className="h-1.5 w-24 bg-[var(--border-strong)] rounded-full overflow-hidden shrink-0">
+                                                            <div 
+                                                                className={`h-full ${ws.storage.percentage > 90 ? 'bg-red-500' : 'bg-blue-500'}`} 
+                                                                style={{ width: `${ws.storage.percentage}%` }}
+                                                            />
+                                                        </div>
+                                                        <span className="text-[10px] text-[var(--text-3)]">{ws.storage.usageGB} / {ws.storage.limitGB} GB</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             {targetWorkspace?.email === ws.email && <CheckCircle2 size={16} className="text-blue-500" />}
                                         </button>
@@ -326,8 +345,9 @@ export default function StudioPage() {
                     )}
                 </div>
             </div>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

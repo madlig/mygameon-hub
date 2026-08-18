@@ -18,16 +18,28 @@ export async function GET(req) {
 
     try {
       const drive = await getClientForEmail(email);
-      const res = await drive.about.get({
-        fields: 'storageQuota'
-      });
-
-      const { usage, limit } = res.data.storageQuota;
+      let totalBytes = 0
+      let pageToken = null
       
-      // Convert to GB
-      const usageGB = (usage / (1024 ** 3)).toFixed(2);
-      const limitGB = limit ? (limit / (1024 ** 3)).toFixed(2) : 'Unlmited';
-      const percentage = limit ? Math.min(100, Math.round((usage / limit) * 100)) : 0;
+      do {
+        const listRes = await drive.files.list({
+          q: "trashed=false and 'me' in owners",
+          fields: "nextPageToken, files(quotaBytesUsed)",
+          pageSize: 1000,
+          spaces: 'drive',
+        })
+        
+        for (const f of listRes.data.files || []) {
+          if (f.quotaBytesUsed) {
+            totalBytes += parseInt(f.quotaBytesUsed, 10)
+          }
+        }
+        pageToken = listRes.data.nextPageToken
+      } while (pageToken)
+      
+      const usageGB = (totalBytes / (1024 ** 3)).toFixed(2)
+      const limitGB = 1024
+      const percentage = Math.min(100, Math.round((totalBytes / (limitGB * (1024 ** 3))) * 100))
 
       return NextResponse.json({ 
         success: true, 

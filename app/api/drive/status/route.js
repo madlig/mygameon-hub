@@ -37,6 +37,7 @@ export async function GET() {
     // 3. UNTUK SETIAP WORKSPACE: ambil 1 game sebagai sampel, probe download-ability
     const workspaces = []
     const limited = []
+    let globalPooledStorage = null
 
     await Promise.all(accounts.map(async (acc) => {
       try {
@@ -60,6 +61,7 @@ export async function GET() {
         let wsStatus = 'ok'
         let wsReason = ''
         let hasSharedDriveAccess = true
+        let storageInfo = null
 
         try {
           // Check Shared Drive Access
@@ -67,6 +69,47 @@ export async function GET() {
         } catch (sharedErr) {
           hasSharedDriveAccess = false
           wsReason = 'Belum tergabung ke Shared Drive KEBERSAMAAN'
+        }
+
+        try {
+          // Hanya fetch Pooled Storage sekali untuk efisiensi API
+          if (!globalPooledStorage) {
+            const aboutRes = await drive.about.get({ fields: 'storageQuota' })
+            const { usage, limit } = aboutRes.data.storageQuota
+            if (limit && parseInt(limit, 10) >= (100 * 1024 ** 3)) { // Jika limit >= 100 TB
+              const pooledUsageGB = (usage / (1024 ** 3)).toFixed(2)
+              const pooledLimitGB = (limit / (1024 ** 3)).toFixed(2)
+              const pooledPercentage = Math.min(100, Math.round((usage / limit) * 100))
+              globalPooledStorage = { usageGB: pooledUsageGB, limitGB: pooledLimitGB, percentage: pooledPercentage }
+            }
+          }
+
+          // Hitung ukuran aktual via pencarian global super cepat
+          let totalBytes = 0
+          let pageToken = null
+          
+          do {
+            const res = await drive.files.list({
+              q: "trashed=false and 'me' in owners",
+              fields: "nextPageToken, files(quotaBytesUsed)",
+              pageSize: 1000,
+              spaces: 'drive',
+            })
+            
+            for (const f of res.data.files || []) {
+              if (f.quotaBytesUsed) {
+                totalBytes += parseInt(f.quotaBytesUsed, 10)
+              }
+            }
+            pageToken = res.data.nextPageToken
+          } while (pageToken)
+          
+          const usageGB = (totalBytes / (1024 ** 3)).toFixed(2)
+          const limitGB = 1024 // 1 TB Hardcoded
+          const percentage = Math.min(100, Math.round((totalBytes / (limitGB * (1024 ** 3))) * 100))
+          storageInfo = { usageGB, limitGB, percentage }
+        } catch (storageErr) {
+          // Abaikan error storage agar tidak memblokir fungsionalitas lain
         }
 
         try {
@@ -111,6 +154,7 @@ export async function GET() {
           status: wsStatus,
           reason: wsReason,
           hasSharedDriveAccess,
+          storage: storageInfo,
           allFiles: games.map(g => ({
             id: g.folderId,
             name: g.name,
@@ -149,6 +193,7 @@ export async function GET() {
       limited,
       workspaces,
       fileCount: totalFiles,
+      globalPooledStorage
     }
 
     // 5. PERSIST TRANSITIONS TO SHEET

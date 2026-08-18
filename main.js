@@ -1,4 +1,5 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 if (require('electron-squirrel-startup')) return app.quit();
 
 const path = require('path');
@@ -96,19 +97,43 @@ function parseEnvFile(filePath) {
   return parsedEnv;
 }
 
-function checkForSquirrelUpdates() {
+function setupAutoUpdater() {
   if (!app.isPackaged) return;
-  const updateExe = path.join(path.dirname(process.execPath), '..', 'Update.exe');
-  if (!fs.existsSync(updateExe)) return;
 
-  const feedUrl = 'https://github.com/madlig/mygameon-hub/releases/latest/download';
-  try {
-    const child = spawn(updateExe, [`--update=${feedUrl}`], { detached: true, stdio: 'ignore' });
-    child.unref();
-  } catch (err) {
-    console.error('Failed to trigger Squirrel update:', err);
-  }
+  // Konfigurasi autoUpdater
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update_available', info);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update_downloaded', info);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('AutoUpdater error:', err);
+  });
+
+  // Jalankan pengecekan
+  autoUpdater.checkForUpdatesAndNotify();
 }
+
+ipcMain.on('quit-and-install', () => {
+  if (!app.isPackaged) return;
+  autoUpdater.quitAndInstall(false, true); // (isSilent, isForceRunAfter)
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -125,6 +150,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     },
   });
 
@@ -260,10 +286,10 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  // Cek pembaruan via Squirrel saat startup
-  checkForSquirrelUpdates();
+  // Cek pembaruan saat startup
+  setupAutoUpdater();
   // Cek ulang setiap 6 jam
-  setInterval(checkForSquirrelUpdates, 6 * 60 * 60 * 1000);
+  setInterval(setupAutoUpdater, 6 * 60 * 60 * 1000);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

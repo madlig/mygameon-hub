@@ -8,6 +8,16 @@ import { useEffect, useState } from 'react'
 export default function TopBar({ title, backHref }) {
   const { data: session, status } = useSession()
   const [driveLimit, setDriveLimit] = useState(null)
+  const [updateReady, setUpdateReady] = useState(false)
+
+  useEffect(() => {
+    // Listen for auto-update downloaded event
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.onUpdateDownloaded(() => {
+        setUpdateReady(true)
+      })
+    }
+  }, [])
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -56,6 +66,23 @@ export default function TopBar({ title, backHref }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
+          {/* UPDATE READY NOTIFICATION */}
+          {updateReady && (
+            <button
+              style={{ WebkitAppRegion: 'no-drag' }}
+              onClick={() => window.electronAPI?.quitAndInstall()}
+              className="pressable animate-in slide-in-from-top-2 fade-in duration-300 flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-500/15 px-3 py-1.5 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:bg-purple-500/25 transition-colors"
+            >
+              <span className="relative flex h-2 w-2 items-center justify-center">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-purple-500"></span>
+              </span>
+              <span className="hidden text-[11px] font-bold text-purple-400 sm:inline tracking-wide">
+                Update Siap! Klik Restart
+              </span>
+            </button>
+          )}
+
           {/* PREMIUM DRIVE STATUS INDICATOR */}
           {status === 'loading' ? (
             <div className="flex items-center gap-2 rounded-full border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-1.5 shadow-sm">

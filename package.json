@@ -11,13 +11,14 @@
     "start": "next start",
     "lint": "next lint",
     "dev:electron": "concurrently -k \"npm run dev\" \"electron .\"",
-    "build:electron": "node -e \"const fs=require('fs'); fs.rmSync('dist', {recursive:true, force:true}); fs.rmSync('.next', {recursive:true, force:true});\" && npm run build && node scripts/resolve-symlinks.js && electron-builder",
+    "build:electron": "node -e \"const fs=require('fs'); fs.rmSync('dist', {recursive:true, force:true}); fs.rmSync('.next', {recursive:true, force:true});\" && npm run build && node scripts/resolve-symlinks.js && node scripts/build-publish.js",
     "release:patch": "npm version patch --force && npm run build:electron",
     "release:minor": "npm version minor --force && npm run build:electron",
     "release:major": "npm version major --force && npm run build:electron"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@base-ui/react": "^1.4.1",
