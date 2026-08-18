@@ -345,9 +345,9 @@ export default function StudioPage() {
                     )}
                 </div>
             </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
+    )}
     </div>
   )
 }
