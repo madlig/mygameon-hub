@@ -26,7 +26,8 @@ const primary = [
 
 const moreItems = [
   { href: '/revoke', icon: ShieldX, label: 'Revoke akses', desc: 'Cabut akses customer', accent: '#ef4444' },
-  { href: '/check', icon: Folder, label: 'Cek file', desc: 'Cek isi folder game', accent: '#60a5fa' },
+  { href: '/drive-status', icon: Folder, label: 'Status Drive', desc: 'Pantau kapasitas Google Drive', accent: '#60a5fa' },
+  { href: '/accounts', icon: KeyRound, label: 'Kelola Akun', desc: 'Atur whitelist email', accent: '#f59e0b' },
   { href: '/sims4/licenses', icon: KeyRound, label: 'Kelola lisensi', desc: 'Database Sims 4', accent: '#a78bfa' },
 ]
 
