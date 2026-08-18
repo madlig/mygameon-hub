@@ -24,6 +24,13 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Create .env.local from Secret
+        shell: bash
+        run: |
+          cat << 'EOF' > .env.local
+          ${{ secrets.ENV_LOCAL }}
+          EOF
+
       - name: Build and Publish Electron App
         run: npm run build:electron
         env:
