@@ -1,97 +1,26 @@
+import { Suspense } from 'react'
+import TopBar from '@/components/layout/TopBar'
+import Link from 'next/link'
+import { Clock, Folder, Hourglass, KeyRound, ReceiptText, Search, Send, Users, Sparkles, AlertTriangle, TrendingUp, ShieldAlert, Star, Activity, Terminal } from 'lucide-react'
+import connectToDatabase from '@/lib/db'
+import Sims4License from '@/models/Sims4License'
+import AccessLog from '@/models/AccessLog'
+import Customer from '@/models/Customer'
+import WorkspaceAccount from '@/models/WorkspaceAccount'
+import SalesAnalyticsModal from '@/components/dashboard/SalesAnalyticsModal'
+
 export const dynamic = 'force-dynamic'
 
-import TopBar from '@/components/layout/TopBar'
-import StatCard from '@/components/shared/StatCard'
-import { AppBadge, AppCard, SectionLabel } from '@/components/shared/design-system'
-import Link from 'next/link'
-import { Clock, Folder, Hourglass, KeyRound, ReceiptText, Search, Send, ShieldX, Sparkles } from 'lucide-react'
-import { getGoogleClients } from '@/lib/googleClient'
-import { parseSheetDate } from '@/lib/utils'
-
-const quickActions = [
-  { icon: Search, label: 'Cari game', desc: 'Search & keranjang', href: '/search', accent: '#ffd100' },
-  { icon: Sparkles, label: 'Order Sims 4', desc: 'Input pesanan baru', href: '/sims4/order', accent: '#a78bfa' },
-  { icon: ShieldX, label: 'Revoke akses', desc: 'Cabut akses customer', href: '/revoke', accent: '#ef4444' },
-  { icon: Folder, label: 'Cek file', desc: 'Cek isi folder game', href: '/check', accent: '#60a5fa' },
-  { icon: KeyRound, label: 'Lisensi Sims 4', desc: 'Kelola database', href: '/sims4/licenses', accent: '#a78bfa' },
-  { icon: Clock, label: 'Log & history', desc: 'Riwayat transaksi', href: '/log', accent: '#a8a29e' },
+const allApps = [
+  { icon: Search, label: 'Katalog', desc: 'Pencarian Game', href: '/search', accent: '#fbbf24' },
+  { icon: Sparkles, label: 'Sims 4', desc: 'Order Game', href: '/sims4/order', accent: '#c084fc' },
+  { icon: Users, label: 'CRM', desc: 'Data Pelanggan', href: '/revoke', accent: '#60a5fa' },
+  { icon: Clock, label: 'Log', desc: 'Riwayat Kirim', href: '/log', accent: '#9ca3af' },
+  { icon: Folder, label: 'Drive', desc: 'Status Kapasitas', href: '/drive-status', accent: '#3b82f6' },
+  { icon: ShieldAlert, label: 'Cek File', desc: 'Folder Game', href: '/check', accent: '#38bdf8' },
+  { icon: Terminal, label: 'Lisensi', desc: 'DB Hardware', href: '/sims4/licenses', accent: '#a78bfa' },
+  { icon: KeyRound, label: 'Akun', desc: 'Whitelist Email', href: '/accounts', accent: '#f59e0b' },
 ]
-
-const jkt = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
-
-async function getDashboardStats() {
-  try {
-    const { sheets } = await getGoogleClients()
-
-    const [generalRes, sims4Res] = await Promise.all([
-      sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_ID, range: 'Sheet1!A:E', valueRenderOption: 'UNFORMATTED_VALUE' }),
-      sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_SIMS4_ID, range: 'Licenses!A:G', valueRenderOption: 'UNFORMATTED_VALUE' }),
-    ])
-
-    const generalRows = (generalRes.data.values || [])
-      .filter(row => row[0] && row[0] !== 'Date')
-      .map(row => ({
-        time: parseSheetDate(row[0]),
-        email: row[1] || '',
-        product: row[2] || '',
-        isBonus: (row[4] || '') === 'bonus',
-      }))
-
-    const sims4Rows = (sims4Res.data.values || []).filter(row => row[0] && row[0] !== 'Invoice')
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
-
-    // Hitungan hari ini — KECUALIKAN bonus (bonus terkait pesanan sebelumnya)
-    const todayGen = generalRows.filter(r => r.time && jkt(r.time) === today && !r.isBonus)
-    const todayGames = todayGen.length
-    const todayOrders = new Set(todayGen.map(r => `${r.email}_${String(r.time).slice(0, 16)}`)).size
-
-    const todaySims4Rows = sims4Rows.filter(row => {
-      const t = parseSheetDate(row[6])
-      return t && jkt(t) === today
-    })
-    const activeLicenses = sims4Rows.filter(row => row[4] === 'Active').length
-
-    // Akses akan expired ≤2 hari
-    let expiringSoon = 0
-    try {
-      const expRes = await sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_ID, range: 'ExpiringAccess!A:F' })
-      const now = Date.now()
-      const horizon = now + 2 * 24 * 60 * 60 * 1000
-      expiringSoon = (expRes.data.values || []).filter(row => {
-        if ((row[5] || '').toLowerCase() !== 'active') return false
-        const exp = new Date(row[4]).getTime()
-        return !isNaN(exp) && exp >= now && exp <= horizon
-      }).length
-    } catch (e) {
-      console.error('Expiring stat error:', e.message)
-    }
-
-    const generalLogs = generalRows.map(r => ({ type: 'general', email: r.email, product: r.product, time: r.time, isBonus: r.isBonus }))
-    const sims4Logs = sims4Rows.map(row => ({
-      type: 'sims4',
-      email: row[5] || '',
-      product: `Sims 4 - ${row[3] === 'Y' ? 'Premium CC' : 'Standard'}`,
-      time: parseSheetDate(row[6]),
-      isBonus: false,
-    }))
-
-    const recentLogs = [...generalLogs, ...sims4Logs]
-      .filter(l => l.time)
-      .sort((a, b) => new Date(b.time) - new Date(a.time))
-      .slice(0, 6)
-
-    return {
-      todayOrders: todayOrders + todaySims4Rows.length,
-      todayGames: todayGames + todaySims4Rows.length,
-      activeLicenses,
-      expiringSoon,
-      recentLogs,
-    }
-  } catch (e) {
-    console.error('Dashboard stats error:', e)
-    return { todayOrders: 0, todayGames: 0, activeLicenses: 0, expiringSoon: 0, recentLogs: [] }
-  }
-}
 
 function formatTime(timeStr) {
   if (!timeStr) return '-'
@@ -100,7 +29,7 @@ function formatTime(timeStr) {
     const minutes = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     if (minutes < 1) return 'Baru saja'
-    if (minutes < 60) return `${minutes} menit lalu`
+    if (minutes < 60) return `${minutes} mnt lalu`
     if (hours < 24) return `${hours} jam lalu`
     return new Date(timeStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
   } catch {
@@ -108,87 +37,228 @@ function formatTime(timeStr) {
   }
 }
 
+async function getDashboardStats() {
+  try {
+    await connectToDatabase()
+
+    const now = new Date()
+    const startOfDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }))
+    startOfDay.setHours(0, 0, 0, 0)
+    
+    // 1. Fetch Today's Data
+    const todayAccess = await AccessLog.find({ grantedAt: { $gte: startOfDay } }).lean()
+    const todaySims = await Sims4License.find({ createdAt: { $gte: startOfDay } }).lean()
+
+    const todayOrdersSet = new Set(todayAccess.map(a => a.email))
+    const todayOrders = todayOrdersSet.size + todaySims.length
+    const todayGames = todayAccess.filter(a => !a.isBonus).length + todaySims.length
+
+    // 2. Fetch Aggregates
+    const activeLicenses = await Sims4License.countDocuments({ status: 'Active' })
+    const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000)
+    const expiringSoon = await AccessLog.countDocuments({ status: 'active', expiresAt: { $gte: now, $lte: twoDaysFromNow } })
+    const expiredToRevoke = await AccessLog.countDocuments({ status: 'active', expiresAt: { $lt: now } })
+
+    // 3. Smart Insights Generation
+    const insights = []
+    
+    // Insight A: Workspace Storage
+    const workspaces = await WorkspaceAccount.find({ status: 'active' }).lean()
+    const criticalDrives = workspaces.filter(w => w.storage && (w.storage.usageGB / w.storage.limitGB) > 0.9)
+    if (criticalDrives.length > 0) {
+      insights.push({
+        type: 'danger', icon: AlertTriangle,
+        title: 'Kapasitas Kritis',
+        text: `Akun ${criticalDrives[0].email} hampir penuh (${(criticalDrives[0].storage.usageGB / criticalDrives[0].storage.limitGB * 100).toFixed(1)}%). Segera lakukan pembersihan.`
+      })
+    }
+
+    // Insight B: Revoke Needed
+    if (expiredToRevoke > 0) {
+      insights.push({
+        type: 'warning', icon: ShieldAlert,
+        title: 'Tindakan Keamanan',
+        text: `Terdapat ${expiredToRevoke} akses game pelanggan (kadaluarsa) yang perlu segera di-revoke hari ini.`
+      })
+    }
+
+    // Insight C: Trending Game (Aggregation)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const topGames = await AccessLog.aggregate([
+      { $match: { grantedAt: { $gte: thirtyDaysAgo }, isBonus: false } },
+      { $group: { _id: "$gameName", count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 1 }
+    ])
+    if (topGames.length > 0 && topGames[0].count > 3) {
+      insights.push({
+        type: 'info', icon: TrendingUp,
+        title: 'Tren Sistem',
+        text: `Game "${topGames[0]._id}" terjual ${topGames[0].count}x bulan ini. Pantau aktivitas Google Drive agar terhindar dari limit.`
+      })
+    }
+
+    // Insight D: VIP Customers
+    const topCustomer = await Customer.findOne({ status: 'active' }).sort({ orderCount: -1 }).lean()
+    if (topCustomer && topCustomer.orderCount >= 5) {
+      insights.push({
+        type: 'success', icon: Star,
+        title: 'Sinyal Loyalitas',
+        text: `Pelanggan ${topCustomer.email} telah mengorder ${topCustomer.orderCount}x sejauh ini. Pertimbangkan penawaran VIP.`
+      })
+    }
+
+    // 4. Recent Logs (Combined)
+    const recentAccess = await AccessLog.find().sort({ grantedAt: -1 }).limit(7).lean()
+    const recentSims = await Sims4License.find().sort({ createdAt: -1 }).limit(7).lean()
+    
+    const combinedLogs = [
+      ...recentAccess.map(a => ({ type: 'general', email: a.email, product: a.gameName, time: a.grantedAt, isBonus: a.isBonus })),
+      ...recentSims.map(s => ({ type: 'sims4', email: s.email, product: `Sims 4 - ${s.cc === 'Y' ? 'Premium CC' : 'Standard'}`, time: s.createdAt, isBonus: false }))
+    ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 8)
+
+    return { success: true, todayOrders, todayGames, activeLicenses, expiringSoon, insights: insights.slice(0, 4), recentLogs: combinedLogs, genTime: now.toLocaleTimeString('id-ID') }
+  } catch (e) {
+    console.error('Dashboard stats error:', e)
+    return { todayOrders: 0, todayGames: 0, activeLicenses: 0, expiringSoon: 0, insights: [], recentLogs: [], genTime: '' }
+  }
+}
+
 export default async function DashboardPage() {
   const stats = await getDashboardStats()
 
   return (
-    <div className="fadeUp">
+    <div className="fadeUp h-full flex flex-col">
       <TopBar title="Dashboard" />
 
-      <div className="mb-5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--text-3)]">Selamat datang kembali 👋</p>
-        <h2 className="font-display mt-1 text-2xl font-extrabold tracking-tight text-[var(--text)] md:text-[28px]">
-          Hari ini <span className="gradient-text">{stats.todayOrders} order</span> masuk.
-        </h2>
+      {/* Header Compact */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4 mt-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-3)]">Selamat Datang Kembali 👋</p>
+          <h2 className="font-display mt-0.5 text-2xl font-extrabold tracking-tight text-[var(--text)]">
+            Hari ini <span className="gradient-text">{stats.todayOrders} order</span> masuk.
+          </h2>
+        </div>
+        <div className="shrink-0">
+          <SalesAnalyticsModal />
+        </div>
       </div>
 
-      <div className="stagger mb-7 grid grid-cols-2 gap-[var(--gap)] md:grid-cols-4">
-        <StatCard label="Order hari ini" value={stats.todayOrders} sub={stats.todayOrders > 0 ? `${stats.todayOrders} transaksi` : 'Belum ada'} subColor={stats.todayOrders > 0 ? 'text-[#4ade80]' : 'text-[var(--text-3)]'} icon={ReceiptText} accent="#ffd100" />
-        <StatCard label="Game dikirim" value={stats.todayGames} sub="Hari ini · tanpa bonus" subColor="text-[#93c5fd]" icon={Send} accent="#60a5fa" />
-        <StatCard label="Lisensi Sims 4" value={stats.activeLicenses} sub="Total aktif" icon={KeyRound} accent="#a78bfa" />
-        <StatCard
-          label="Akan expired"
-          value={stats.expiringSoon}
-          sub={stats.expiringSoon > 0 ? '≤2 hari lagi' : 'Aman'}
-          subColor={stats.expiringSoon > 0 ? 'text-[#fbbf24]' : 'text-[#4ade80]'}
-          icon={Hourglass}
-          accent={stats.expiringSoon > 0 ? '#f59e0b' : '#22c55e'}
-        />
+      {/* Stats Cards Compact */}
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          { label: 'Order Hari Ini', val: stats.todayOrders, sub: 'Transaksi sukses', icon: ReceiptText, c: '#fbbf24' },
+          { label: 'Game Terkirim', val: stats.todayGames, sub: 'Tanpa bonus', icon: Send, c: '#60a5fa' },
+          { label: 'Lisensi Aktif', val: stats.activeLicenses, sub: 'The Sims 4', icon: KeyRound, c: '#c084fc' },
+          { label: 'Akan Expired', val: stats.expiringSoon, sub: '< 48 Jam', icon: Hourglass, c: stats.expiringSoon > 0 ? '#ef4444' : '#10b981' }
+        ].map((m, i) => (
+          <div key={i} className="group relative overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 transition-colors hover:border-[var(--border-strong)]">
+            <div className="absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-[0.03] transition-transform group-hover:scale-150" style={{ background: `radial-gradient(circle, ${m.c} 0%, transparent 70%)` }} />
+            <div className="relative z-10 flex items-center justify-between mb-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-3)]">{m.label}</p>
+              <m.icon size={14} style={{ color: m.c }} />
+            </div>
+            <p className="relative z-10 text-2xl font-black text-[var(--text)] leading-none">{m.val}</p>
+            <p className="relative z-10 mt-1.5 text-[9px] font-semibold uppercase tracking-wider text-[var(--text-4)]">{m.sub}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Lower: aksi cepat + aktivitas (2 kolom di desktop) */}
-      <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-6 lg:items-start">
-        {/* Aksi cepat */}
-        <div className="mb-7 lg:mb-0">
-          <SectionLabel>Aksi cepat</SectionLabel>
-          <div className="stagger grid grid-cols-2 gap-[var(--gap)] sm:grid-cols-3">
-            {quickActions.map((action) => {
-              const Icon = action.icon
-              return (
-                <Link
-                  key={action.href}
-                  href={action.href}
-                  className="pressable card-hover group flex flex-col gap-2.5 rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-[var(--pad-card)] text-left"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-xl transition-transform group-hover:scale-110" style={{ background: `${action.accent}1f`, color: action.accent, boxShadow: `0 0 18px -8px ${action.accent}` }}>
-                    <Icon size={17} />
-                  </span>
-                  <div>
-                    <p className="text-[13px] font-bold text-[var(--text)]">{action.label}</p>
-                    <p className="mt-0.5 text-[10.5px] leading-snug text-[var(--text-3)]">{action.desc}</p>
-                  </div>
-                </Link>
-              )
-            })}
+      <div className="grid xl:grid-cols-[1fr_360px] gap-6 items-start flex-1">
+        
+        {/* Left Column: Insights & Quick Actions */}
+        <div className="flex flex-col gap-6">
+          
+          {/* Dynamic Insights Terminal Style */}
+          {stats.insights && stats.insights.length > 0 && (
+            <div className="rounded-2xl border border-[var(--border-strong)] bg-black/40 p-1 overflow-hidden font-mono shadow-inner relative">
+              {/* Terminal Header */}
+              <div className="flex items-center justify-between border-b border-white/5 bg-black/20 px-4 py-2">
+                <div className="flex items-center gap-2">
+                  <Terminal size={14} className="text-[var(--text-3)]" />
+                  <span className="text-[10px] font-bold tracking-wider text-[var(--text-3)] uppercase">MyGameON :: Analytics Engine</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-[var(--text-4)]">Last scan: {stats.genTime}</span>
+                  <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)] animate-pulse" />
+                </div>
+              </div>
+              
+              {/* Terminal Body */}
+              <div className="p-4 space-y-3">
+                {stats.insights.map((insight, i) => {
+                  const colors = {
+                    danger: 'text-red-400', warning: 'text-amber-400',
+                    info: 'text-blue-400', success: 'text-green-400'
+                  }
+                  return (
+                    <div key={i} className="flex gap-3 text-xs animate-in fade-in slide-in-from-left-2" style={{ animationDelay: `${i * 150}ms`, animationFillMode: 'both' }}>
+                      <span className="text-[var(--text-4)] shrink-0 opacity-50">&gt;</span>
+                      <div>
+                        <span className={`font-bold ${colors[insight.type]} uppercase tracking-wider`}>[{insight.title}]</span>
+                        <span className="text-[var(--text-2)] ml-2 leading-relaxed">{insight.text}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              {/* Scanning scanline effect */}
+              <div className="pointer-events-none absolute inset-0 z-10 h-full w-full bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.1)_50%)] bg-[length:100%_4px]" />
+            </div>
+          )}
+
+          {/* App Grid (Full Menu) */}
+          <div className="rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 md:p-5 shadow-sm">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] mb-4 ml-1">Menu Aplikasi</h3>
+            <div className="grid grid-cols-4 gap-y-5 gap-x-2 sm:grid-cols-4 lg:grid-cols-4">
+              {allApps.map((app) => {
+                const Icon = app.icon
+                return (
+                  <Link
+                    key={app.href} href={app.href}
+                    className="group flex flex-col items-center gap-2 transition-all hover:scale-105 active:scale-95"
+                  >
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm transition-all group-hover:shadow-md" style={{ background: `linear-gradient(135deg, ${app.accent}20 0%, ${app.accent}40 100%)`, color: app.accent, border: `1px solid ${app.accent}30` }}>
+                      <Icon size={24} strokeWidth={2} />
+                    </div>
+                    <span className="text-[10px] sm:text-xs font-bold text-[var(--text-2)] text-center leading-tight">{app.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Terakhir dikirim */}
-        <div>
-          <SectionLabel right={<Link href="/log" className="text-[10px] font-semibold text-[var(--text-2)] transition-colors hover:text-[var(--primary)]">Lihat semua →</Link>}>
-            Terakhir dikirim
-          </SectionLabel>
-          <div className="stagger flex flex-col gap-[var(--gap)]">
+        {/* Right Column: Live Feed */}
+        <div className="flex flex-col rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--elevated)] px-4 py-3 shrink-0">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text)] flex items-center gap-2">
+              <Activity size={14} className="text-[var(--primary)]" />
+              Live Activity Feed
+            </h3>
+            <Link href="/log" className="text-[9px] font-bold uppercase tracking-widest text-[var(--text-3)] hover:text-[var(--text)] transition-colors">Semua</Link>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-1.5 space-y-1 max-h-[400px]">
             {stats.recentLogs.length === 0 ? (
-              <AppCard className="px-4 py-8 text-center">
-                <p className="text-sm text-[var(--text-3)]">Belum ada transaksi</p>
-              </AppCard>
+              <div className="flex h-32 flex-col items-center justify-center text-center text-[var(--text-3)]">
+                <p className="text-xs font-medium">Belum ada aktivitas</p>
+              </div>
             ) : (
               stats.recentLogs.map((log, i) => (
-                <AppCard key={i} hover className="flex items-center justify-between gap-3" style={{ padding: 'var(--pad-row)' }}>
-                  <div className="min-w-0">
-                    <p className="truncate text-[12.5px] font-semibold text-[var(--text)]">{log.email}</p>
-                    <p className="mt-0.5 truncate text-[10.5px] text-[var(--text-3)]">
-                      {log.product} · <span className="text-[var(--text-2)]">{formatTime(log.time)}</span>
-                    </p>
+                <div key={i} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 transition hover:bg-[var(--elevated)]">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold ${log.isBonus ? 'bg-[var(--accent)]/15 text-[var(--accent)]' : log.type === 'sims4' ? 'bg-[#c084fc]/15 text-[#c084fc]' : 'bg-[var(--primary)]/15 text-[var(--primary)]'}`}>
+                      {log.isBonus ? 'B' : log.type === 'sims4' ? 'S' : 'G'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-bold text-[var(--text)]">{log.email}</p>
+                      <p className="truncate text-[10px] text-[var(--text-3)] mt-0.5">{log.product}</p>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {log.isBonus && <AppBadge tone="accent">Bonus</AppBadge>}
-                    <AppBadge tone={log.type === 'sims4' ? 'sims' : 'primary'}>
-                      {log.type === 'sims4' ? 'Sims 4' : 'General'}
-                    </AppBadge>
-                  </div>
-                </AppCard>
+                  <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-[var(--text-4)]">{formatTime(log.time)}</span>
+                </div>
               ))
             )}
           </div>

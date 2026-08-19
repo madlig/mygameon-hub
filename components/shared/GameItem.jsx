@@ -24,7 +24,7 @@ export default function GameItem({
     <div 
       ref={ref} 
       onClick={onClick}
-      className={`group relative flex items-center justify-between gap-3 overflow-hidden rounded-2xl bg-[var(--surface)] px-4 py-3 transition-all duration-300 cursor-pointer border ${border} hover:border-[var(--primary)]/50 hover:shadow-[0_0_0_1px_rgba(255,209,0,0.2)]`}
+      className={`group relative flex items-center justify-between gap-3 overflow-hidden rounded-2xl bg-[var(--surface)] px-3.5 py-2.5 transition-all duration-300 cursor-pointer border ${border} hover:border-[var(--primary)]/50 hover:shadow-[0_0_0_1px_rgba(255,209,0,0.2)]`}
     >
       {/* Background Glow Effect */}
       <div className="pointer-events-none absolute -inset-px rounded-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" style={{ background: 'radial-gradient(400px circle at 50% 50%, rgba(255,255,255,0.03), transparent 60%)' }} />

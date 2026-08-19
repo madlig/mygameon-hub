@@ -2,20 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut, useSession } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import {
-  Clock,
-  Folder,
-  Gamepad2,
-  Grid2X2,
-  KeyRound,
-  LogOut,
-  Search,
-  ShieldX,
-  Sparkles,
-  HardDrive,
-  Settings
+  Search, Settings, Clock, Users, Gamepad2, Grid2X2,
+  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud
 } from 'lucide-react'
 
 const navGroups = [
@@ -23,24 +14,24 @@ const navGroups = [
     label: 'General Games',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard' },
-      { href: '/search', icon: Search, label: 'Cari game' },
-      { href: '/revoke', icon: ShieldX, label: 'Revoke akses' },
+      { href: '/search', icon: Search, label: 'Cari Game' },
+      { href: '/revoke', icon: Users, label: 'CRM Pelanggan' },
     ],
   },
   {
     label: 'The Sims 4',
     items: [
-      { href: '/sims4/order', icon: Sparkles, label: 'Order baru' },
-      { href: '/sims4/licenses', icon: KeyRound, label: 'Kelola lisensi' },
+      { href: '/sims4/order', icon: Sparkles, label: 'Order Baru' },
+      { href: '/sims4/licenses', icon: KeyRound, label: 'Kelola Lisensi' },
     ],
   },
   {
-    label: 'Lainnya',
+    label: 'Workspace & Log',
     items: [
       { href: '/studio', icon: HardDrive, label: 'Upload Studio' },
-      { href: '/drive-status', icon: Settings, label: 'Status Drive' },
-      { href: '/accounts', icon: Settings, label: 'Kelola Akun' },
-      { href: '/log', icon: Clock, label: 'Log & history' }
+      { href: '/drive-status', icon: Cloud, label: 'Status Drive' },
+      { href: '/log', icon: Clock, label: 'Log Transaksi' },
+      { href: '/accounts', icon: Settings, label: 'Pengaturan Akun' },
     ],
   },
 ]
@@ -62,34 +53,32 @@ export default function Sidebar() {
     }
   }, [status])
 
-  const online = status === 'authenticated' && session?.error !== 'RefreshTokenError'
-
   return (
-    <aside className="hidden w-[var(--sb-w)] flex-shrink-0 flex-col border-r border-[var(--border-soft)] bg-[var(--surface)]/60 backdrop-blur-xl md:flex">
-      {/* Brand */}
-      <div className="flex items-center gap-2.5 px-4 py-4">
-        <div className="glow-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)] text-[var(--primary-fg)]">
-          <Gamepad2 size={19} strokeWidth={2.25} />
-        </div>
-        <div className="overflow-hidden">
-          <div className="brand-wordmark whitespace-nowrap text-[15px] leading-tight">
-            <span className="gradient-text">MyGameON</span>
+    <aside className="hidden w-[240px] flex-shrink-0 flex-col border-r border-white/5 bg-[var(--surface)] md:flex shadow-2xl relative z-40">
+      
+      {/* Brand Header */}
+      <div className="flex flex-col items-start px-6 pt-7 pb-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[#fbbf24] text-[var(--primary-fg)] shadow-[0_4px_20px_-5px_rgba(255,209,0,0.5)]">
+            <Gamepad2 size={20} strokeWidth={2.5} />
           </div>
-          <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.22em] text-[var(--text-3)]">Hub Admin</div>
+          <div>
+            <h1 className="text-base font-black tracking-tight text-[var(--text)] uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+              MyGameON
+            </h1>
+            <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--text-4)]">Admin Hub</p>
+          </div>
         </div>
       </div>
 
-      <div className="mx-4 mb-1 h-px bg-gradient-to-r from-transparent via-[var(--border-soft)] to-transparent" />
-
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3">
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-6 scrollbar-none">
         {navGroups.map((group) => (
-          <div key={group.label} className="mb-4">
-            <p className="mb-1.5 flex items-center gap-1.5 px-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--text-3)]">
-              <span className="h-1 w-1 rounded-full bg-[var(--primary)]/60" />
+          <div key={group.label}>
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-widest text-[var(--text-4)]">
               {group.label}
             </p>
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-1">
               {group.items.map((item) => {
                 const isActive = pathname === item.href
                 const Icon = item.icon
@@ -97,22 +86,24 @@ export default function Sidebar() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`group relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition-all ${
-                      isActive
-                        ? 'bg-[var(--primary)]/10 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(255,209,0,0.18)]'
-                        : 'text-[var(--text-2)] hover:bg-[var(--elevated)]/70 hover:text-[var(--text)]'
-                    }`}
+                    className="group relative flex items-center gap-3 rounded-lg px-3 py-2 transition-all outline-none"
                   >
-                    <span
-                      className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
-                        isActive
-                          ? 'bg-[var(--primary)] text-[var(--primary-fg)] shadow-[0_0_16px_-4px_rgba(255,209,0,0.7)]'
-                          : 'bg-[var(--elevated)] text-[var(--text-3)] group-hover:text-[var(--text-2)]'
-                      }`}
-                    >
-                      <Icon size={15} strokeWidth={2.1} />
+                    {/* Active Indicator Line */}
+                    {isActive && (
+                      <div className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[var(--primary)] shadow-[0_0_10px_rgba(255,209,0,0.5)]" />
+                    )}
+                    
+                    {/* Hover Background */}
+                    <div className={`absolute inset-0 rounded-lg transition-colors ${isActive ? 'bg-white/5' : 'group-hover:bg-white/[0.03]'}`} />
+                    
+                    <Icon 
+                      size={16} 
+                      className={`relative z-10 transition-colors ${isActive ? 'text-[var(--primary)]' : 'text-[var(--text-4)] group-hover:text-[var(--text-2)]'}`}
+                      strokeWidth={isActive ? 2.5 : 2}
+                    />
+                    <span className={`relative z-10 text-xs tracking-wide transition-colors ${isActive ? 'font-bold text-[var(--text)]' : 'font-semibold text-[var(--text-3)] group-hover:text-[var(--text-2)]'}`}>
+                      {item.label}
                     </span>
-                    <span className="truncate">{item.label}</span>
                   </Link>
                 )
               })}
@@ -121,62 +112,56 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Status + user */}
-      <div className="border-t border-[var(--border-soft)] p-3">
-        {/* PREMIUM SIDEBAR STATUS INDICATOR */}
-        <div className="mb-3">
+      {/* Server & Cloud Status Panel (Bottom) */}
+      <div className="mt-auto p-4">
+        <div className="flex flex-col rounded-2xl border border-white/5 bg-black/30 p-4 shadow-inner relative overflow-hidden">
+          
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-4)] flex items-center gap-1.5"><Cloud size={12}/> Sistem Cloud</span>
+            {status === 'loading' ? (
+               <Loader2 size={12} className="animate-spin text-gray-400" />
+            ) : session?.error === 'RefreshTokenError' || driveLimit?.status === 'limit' ? (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+              </span>
+            ) : (
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-40"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]"></span>
+              </span>
+            )}
+          </div>
+
           {status === 'loading' ? (
-            <div className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-3 py-2.5 shadow-sm">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-gray-400" />
-              <span className="text-[11px] font-semibold text-gray-400">Menghubungkan…</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-gray-400">Sinkronisasi...</span>
             </div>
           ) : session?.error === 'RefreshTokenError' ? (
-            <div className="flex w-full items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 shadow-[0_0_10px_rgba(239,68,68,0.1)]">
-              <span className="h-2 w-2 rounded-full bg-red-500" />
-              <span className="text-[11px] font-semibold text-red-500">Sesi Terputus</span>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-red-500">Koneksi Terputus</span>
+              <span className="text-[9px] text-red-400 mt-0.5">Sesi Google berakhir</span>
             </div>
           ) : driveLimit?.status === 'limit' ? (
-            <div className="group relative flex w-full flex-col gap-1 overflow-hidden rounded-xl border border-red-500/40 bg-red-500/15 px-3 py-2 shadow-[0_0_15px_rgba(239,68,68,0.25)] cursor-default">
-              <div className="absolute inset-0 bg-red-500/20 animate-pulse"></div>
-              <div className="relative flex items-center gap-2.5">
-                <span className="relative flex h-2.5 w-2.5 items-center justify-center">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-                </span>
-                <span className="text-[11px] font-bold text-red-400 tracking-wide">LIMIT TERDETEKSI</span>
-              </div>
-              <span className="relative pl-5 text-[10px] font-medium text-red-200 line-clamp-1">
-                {driveLimit.limited?.length > 1
-                  ? `${driveLimit.email} + ${driveLimit.limited.length - 1} lainnya`
-                  : (driveLimit.email || 'Workspace dibatasi')}
-              </span>
-            </div>
+             <div className="flex flex-col z-10 relative">
+               <span className="text-xs font-black text-red-500 tracking-wide">LIMIT TERDETEKSI</span>
+               <span className="text-[10px] text-red-200 mt-1 font-medium leading-tight opacity-90 truncate">
+                 {driveLimit.limited?.length > 1
+                   ? `${driveLimit.email} + ${driveLimit.limited.length - 1} lainnya`
+                   : (driveLimit.email || 'Workspace penuh')}
+               </span>
+             </div>
           ) : (
-            <div className="flex w-full items-center gap-2.5 rounded-xl border border-[#10b981]/20 bg-[#10b981]/10 px-3 py-2.5 shadow-[0_0_10px_rgba(16,185,129,0.1)]">
-              <span className="relative flex h-2 w-2 items-center justify-center">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#10b981] opacity-40"></span>
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#10b981]"></span>
-              </span>
-              <span className="text-[11px] font-semibold text-[#10b981] tracking-wide">Cloud Aktif & Aman</span>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-[#10b981] tracking-wide">Semua Operasional</span>
+              <span className="text-[10px] text-[var(--text-3)] mt-0.5 font-medium">Layanan Google Aktif & Aman</span>
             </div>
           )}
-        </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-hi)] text-[12px] font-extrabold text-white">
-            A
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[11.5px] font-bold text-[var(--text)]">Admin</div>
-            <div className="truncate text-[10px] text-[var(--text-3)]">mygameon.store</div>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="pressable flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-3)] transition-colors hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
-            title="Logout"
-          >
-            <LogOut size={14} />
-          </button>
+          {/* Background Danger Glow if Limit */}
+          {driveLimit?.status === 'limit' && (
+            <div className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
+          )}
         </div>
       </div>
     </aside>

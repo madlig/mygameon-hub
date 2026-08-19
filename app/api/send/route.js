@@ -3,6 +3,10 @@ import { getGoogleClients } from '@/lib/googleClient'
 import { getClientForEmail } from '@/lib/googleClient'
 import connectToDatabase from '@/lib/db'
 import GameCatalog from '@/models/GameCatalog'
+import Customer from '@/models/Customer'
+import AccessLog from '@/models/AccessLog'
+import Order from '@/models/Order'
+import BonusSchema from '@/models/BonusSchema'
 
 export async function POST(request) {
   try {
@@ -19,6 +23,11 @@ export async function POST(request) {
     const successItems = []
 
     await connectToDatabase()
+
+    const customer = await Customer.findOne({ email: email.toLowerCase() })
+    if (customer?.status === 'blacklisted') {
+      return NextResponse.json({ error: 'Akses ditolak: Email pelanggan telah diblokir permanen (Blacklisted).' }, { status: 403 })
+    }
 
     for (const item of cart) {
       try {
@@ -126,6 +135,21 @@ export async function POST(request) {
           }
         }
 
+        // Catat riwayat akses ke MongoDB
+        try {
+          await AccessLog.create({
+            email: email.toLowerCase(),
+            gameName: item.name,
+            folderId: realId,
+            permissionId,
+            ownerEmail: ownerEmail || 'Unknown',
+            isBonus: !!isBonus,
+            expiresAt: expirationTime ? new Date(expirationTime) : null
+          })
+        } catch (e) {
+          console.error('AccessLog MongoDB error:', e.message)
+        }
+
         successItems.push({ name: item.name, realId, expirationTime })
         report.push({ name: item.name, status: 'success' })
 
@@ -134,8 +158,55 @@ export async function POST(request) {
       }
     }
 
-    // Kirim email konfirmasi dari akun admin
+    // Kirim email konfirmasi dari akun admin dan update Customer MongoDB
     if (successItems.length > 0) {
+      try {
+        if (!isBonus) {
+            // Calculate bonus based on successItems (what they actually bought)
+            const activeSchema = await BonusSchema.findOne({ isActive: true })
+            let eligible = 0
+            if (activeSchema && activeSchema.rules) {
+                const sortedRules = activeSchema.rules.sort((a,b) => b.buyMin - a.buyMin)
+                for (const rule of sortedRules) {
+                    if (successItems.length >= rule.buyMin) {
+                        eligible = rule.getBonus
+                        break
+                    }
+                }
+            }
+            
+            await Order.create({
+                email: email.toLowerCase(),
+                cartItems: successItems.map(i => ({ name: i.name, targetId: i.realId, isBonus: false })),
+                bonusEligible: eligible,
+                bonusClaimed: 0
+            })
+        } else {
+            // If it's a bonus, fulfill an existing order's pending bonus
+            const pendingOrder = await Order.findOne({ email: email.toLowerCase(), $expr: { $lt: ["$bonusClaimed", "$bonusEligible"] } }).sort({ orderDate: 1 })
+            if (pendingOrder) {
+                pendingOrder.bonusClaimed += successItems.length
+                pendingOrder.cartItems.push(...successItems.map(i => ({ name: i.name, targetId: i.realId, isBonus: true })))
+                await pendingOrder.save()
+            }
+        }
+      } catch (e) {
+          console.error('Order creation error:', e)
+      }
+
+      try {
+        await Customer.findOneAndUpdate(
+          { email: email.toLowerCase() },
+          { 
+            $inc: { orderCount: isBonus ? 0 : 1 },
+            $setOnInsert: { status: 'active', createdAt: new Date() }
+          },
+          { upsert: true }
+        )
+      } catch (e) {
+        console.error('Customer MongoDB upsert error:', e.message)
+      }
+
       try {
         await sendPurchaseEmail(gmail, email, successItems)
       } catch (e) {

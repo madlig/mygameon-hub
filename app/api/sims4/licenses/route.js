@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
+import connectToDatabase from '@/lib/db'
+import Sims4License from '@/models/Sims4License'
 
 const LIMIT = 20
 
@@ -16,65 +18,55 @@ export async function GET(request) {
     const filter = searchParams.get('filter') || 'all'
     const page = parseInt(searchParams.get('page') || '1')
 
-    const { sheets } = await getGoogleClients()
-    const sheetId = process.env.GSHEET_SIMS4_ID
+    await connectToDatabase()
 
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: 'Licenses!A:G',
-    })
-
-    const rows = res.data.values || []
-    const all = rows
-      .filter(row => row[0] && row[0] !== 'Invoice')
-      .map(row => ({
-        invoice: row[0] || '',
-        hwid: row[1] || '',
-        cc: row[3] || 'N',
-        status: row[4] || 'Active',
-        email: row[5] || '',
-        createdAt: row[6] || '',
-      }))
-
-    // Stats global (sebelum search/filter)
-    const stats = {
-      total: all.length,
-      active: all.filter(x => x.status === 'Active').length,
-      banned: all.filter(x => x.status !== 'Active').length,
-      premium: all.filter(x => x.cc === 'Y').length,
-      standard: all.filter(x => x.cc !== 'Y').length,
-      hwidEmpty: all.filter(x => !x.hwid).length,
-    }
-
-    // Urut terbaru dulu
-    all.sort((a, b) => ts(b.createdAt) - ts(a.createdAt))
-
-    // Search
-    let data = all
+    let dbQuery = {}
     if (query) {
-      data = data.filter(item =>
-        item.invoice.toLowerCase().includes(query) ||
-        item.email.toLowerCase().includes(query)
-      )
+      dbQuery = {
+        $or: [
+          { invoice: { $regex: query, $options: 'i' } },
+          { email: { $regex: query, $options: 'i' } }
+        ]
+      }
     }
 
-    // Filter
     if (filter && filter !== 'all') {
-      data = data.filter(item => {
-        switch (filter) {
-          case 'active': return item.status === 'Active'
-          case 'banned': return item.status !== 'Active'
-          case 'premium': return item.cc === 'Y'
-          case 'standard': return item.cc !== 'Y'
-          case 'hwidEmpty': return !item.hwid
-          default: return true
-        }
-      })
+      switch (filter) {
+        case 'active': dbQuery.status = 'Active'; break;
+        case 'banned': dbQuery.status = { $ne: 'Active' }; break;
+        case 'premium': dbQuery.cc = 'Y'; break;
+        case 'standard': dbQuery.cc = { $ne: 'Y' }; break;
+        case 'hwidEmpty': dbQuery.hwid = { $in: [null, ''] }; break;
+      }
     }
 
-    const total = data.length
+    const total = await Sims4License.countDocuments(dbQuery)
     const start = (page - 1) * LIMIT
-    const paginated = data.slice(start, start + LIMIT)
+    
+    const paginated = await Sims4License.find(dbQuery)
+      .sort({ createdAt: -1 })
+      .skip(start)
+      .limit(LIMIT)
+      .lean()
+
+    // Hitung stats global
+    const [statsTotal, statsActive, statsBanned, statsPremium, statsStandard, statsHwidEmpty] = await Promise.all([
+      Sims4License.countDocuments(),
+      Sims4License.countDocuments({ status: 'Active' }),
+      Sims4License.countDocuments({ status: { $ne: 'Active' } }),
+      Sims4License.countDocuments({ cc: 'Y' }),
+      Sims4License.countDocuments({ cc: { $ne: 'Y' } }),
+      Sims4License.countDocuments({ hwid: { $in: [null, ''] } }),
+    ])
+
+    const stats = {
+      total: statsTotal,
+      active: statsActive,
+      banned: statsBanned,
+      premium: statsPremium,
+      standard: statsStandard,
+      hwidEmpty: statsHwidEmpty,
+    }
 
     return NextResponse.json({ licenses: paginated, total, page, limit: LIMIT, stats })
   } catch (err) {
@@ -96,7 +88,12 @@ export async function PATCH(request) {
 
     const { sheets } = await getGoogleClients()
     const sheetId = process.env.GSHEET_SIMS4_ID
+    await connectToDatabase()
 
+    // Update di MongoDB dulu
+    let dbUpdate = {}
+
+    // Ambil baris dari Sheets
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
       range: 'Licenses!A:G',
@@ -106,13 +103,14 @@ export async function PATCH(request) {
     const rowIndex = rows.findIndex(row => row[0] === invoice)
 
     if (rowIndex === -1) {
-      return NextResponse.json({ error: 'Lisensi tidak ditemukan' }, { status: 404 })
+      return NextResponse.json({ error: 'Lisensi tidak ditemukan di Sheets' }, { status: 404 })
     }
 
     // Kolom: A=invoice, B=hwid, C=?, D=cc, E=status, F=email, G=createdAt
     const sheetRow = rowIndex + 1
 
     if (action === 'resetHwid') {
+      dbUpdate = { hwid: '' }
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
         range: `Licenses!B${sheetRow}`,
@@ -122,6 +120,7 @@ export async function PATCH(request) {
     } else if (action === 'toggleCC') {
       const currentCC = rows[rowIndex][3] || 'N'
       const newCC = currentCC === 'Y' ? 'N' : 'Y'
+      dbUpdate = { cc: newCC }
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
         range: `Licenses!D${sheetRow}`,
@@ -129,6 +128,7 @@ export async function PATCH(request) {
         requestBody: { values: [[newCC]] },
       })
     } else if (action === 'ban') {
+      dbUpdate = { status: 'Banned' }
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
         range: `Licenses!E${sheetRow}`,
@@ -136,6 +136,7 @@ export async function PATCH(request) {
         requestBody: { values: [['Banned']] },
       })
     } else if (action === 'unban') {
+      dbUpdate = { status: 'Active' }
       await sheets.spreadsheets.values.update({
         spreadsheetId: sheetId,
         range: `Licenses!E${sheetRow}`,
@@ -145,6 +146,9 @@ export async function PATCH(request) {
     } else {
       return NextResponse.json({ error: 'Action tidak valid' }, { status: 400 })
     }
+
+    // Terapkan ke MongoDB
+    await Sims4License.findOneAndUpdate({ invoice }, { $set: dbUpdate })
 
     return NextResponse.json({ success: true })
   } catch (err) {

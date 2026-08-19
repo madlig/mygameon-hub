@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
+import connectToDatabase from '@/lib/db'
+import Sims4License from '@/models/Sims4License'
 
 export async function POST(request) {
   try {
@@ -18,12 +20,26 @@ export async function POST(request) {
     // Pembeli download launcher dari mygameon.store dan aktivasi pakai
     // License Key (= invoice). Email opsional, hanya untuk arsip.
     if (mode === 'license') {
+      await connectToDatabase()
+      const createdAt = new Date()
+      
+      // Simpan ke MongoDB
+      await Sims4License.create({
+        invoice,
+        hwid: '',
+        cc: ccVal,
+        status: 'Active',
+        email: email || '',
+        createdAt
+      })
+
+      // Simpan ke Sheets (Dual Write)
       await sheets.spreadsheets.values.append({
         spreadsheetId: sheetId,
         range: 'Licenses!A:G',
         valueInputOption: 'RAW',
         requestBody: {
-          values: [[invoice, '', '', ccVal, 'Active', email || '', new Date().toISOString()]],
+          values: [[invoice, '', '', ccVal, 'Active', email || '', createdAt.toISOString()]],
         },
       })
       return NextResponse.json({ success: true, mode: 'license' })
@@ -59,13 +75,25 @@ export async function POST(request) {
       },
     })
 
-    // Catat ke spreadsheet Sims 4
+    // Catat ke MongoDB & Spreadsheet Sims 4 (Dual Write)
+    await connectToDatabase()
+    const createdAt = new Date()
+    
+    await Sims4License.create({
+      invoice,
+      hwid: '',
+      cc: ccVal,
+      status: 'Active',
+      email,
+      createdAt
+    })
+
     await sheets.spreadsheets.values.append({
       spreadsheetId: sheetId,
       range: 'Licenses!A:G',
       valueInputOption: 'RAW',
       requestBody: {
-        values: [[invoice, '', '', ccVal, 'Active', email, new Date().toISOString()]],
+        values: [[invoice, '', '', ccVal, 'Active', email, createdAt.toISOString()]],
       },
     })
 

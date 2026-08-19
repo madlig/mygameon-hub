@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
 import { parseSheetDate } from '@/lib/utils'
+import connectToDatabase from '@/lib/db'
+import Sims4License from '@/models/Sims4License'
 
 const LIMIT = 20
 
@@ -19,10 +21,11 @@ export async function GET(request) {
     const page = parseInt(searchParams.get('page') || '1')
 
     const { sheets } = await getGoogleClients()
+    await connectToDatabase()
 
-    const [generalRes, sims4Res] = await Promise.all([
+    const [generalRes, sims4Docs] = await Promise.all([
       sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_ID, range: 'Sheet1!A:D', valueRenderOption: 'UNFORMATTED_VALUE' }),
-      sheets.spreadsheets.values.get({ spreadsheetId: process.env.GSHEET_SIMS4_ID, range: 'Licenses!A:G', valueRenderOption: 'UNFORMATTED_VALUE' }),
+      Sims4License.find().lean()
     ])
 
     const generalRows = (generalRes.data.values || [])
@@ -36,16 +39,14 @@ export async function GET(request) {
         status: 'Terkirim',
       }))
 
-    const sims4Rows = (sims4Res.data.values || [])
-      .filter(row => row[0] && row[0] !== 'Invoice')
-      .map(row => ({
-        type: 'sims4',
-        time: parseSheetDate(row[6]),
-        email: row[5] || '',
-        product: `Sims 4 · ${row[3] === 'Y' ? 'Premium CC' : 'Standard'}`,
-        source: row[0] || '',
-        status: row[4] || 'Active',
-      }))
+    const sims4Rows = sims4Docs.map(doc => ({
+      type: 'sims4',
+      time: new Date(doc.createdAt).toISOString(),
+      email: doc.email || '',
+      product: `Sims 4 · ${doc.cc === 'Y' ? 'Premium CC' : 'Standard'}`,
+      source: doc.invoice || '',
+      status: doc.status || 'Active',
+    }))
 
     // Gabung & urut terbaru dulu
     let combined = [...generalRows, ...sims4Rows].sort((a, b) => {

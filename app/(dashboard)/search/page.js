@@ -77,15 +77,39 @@ export default function SearchPage() {
 
   const emailValid = isValidEmail(email)
 
-  // Load semua dari localStorage
   useEffect(() => {
     setMounted(true)
     setCart(loadJSON(SK.cart))
+    
+    // Fallback load lokal biar instan
     setRecentEmails(loadJSON(SK.emails))
     setRecentGames(loadJSON(SK.games))
     setFavs(loadJSON(SK.favs))
     setBundles(loadJSON(SK.bundles))
+
+    // Timpa dengan data dari database (tersinkron antar perangkat)
+    fetch('/api/preferences')
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          if (data.recentEmails) { setRecentEmails(data.recentEmails); saveJSON(SK.emails, data.recentEmails) }
+          if (data.recentGames) { setRecentGames(data.recentGames); saveJSON(SK.games, data.recentGames) }
+          if (data.favGames) { setFavs(data.favGames); saveJSON(SK.favs, data.favGames) }
+          if (data.bundles) { setBundles(data.bundles); saveJSON(SK.bundles, data.bundles) }
+        }
+      })
+      .catch(console.error)
   }, [])
+
+  async function syncPreferences(data) {
+    try {
+      await fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+    } catch (e) { console.error('Failed to sync preferences:', e) }
+  }
 
   useEffect(() => { saveJSON(SK.cart, cart) }, [cart])
 
@@ -187,6 +211,7 @@ export default function SearchPage() {
       const exists = prev.some(f => f.id === item.id)
       const next = exists ? prev.filter(f => f.id !== item.id) : [slimGame(item), ...prev].slice(0, 30)
       saveJSON(SK.favs, next)
+      syncPreferences({ favGames: next })
       return next
     })
   }
@@ -201,6 +226,7 @@ export default function SearchPage() {
     setBundles(prev => {
       const next = [{ id: uid(), name: nm, items: cart.map(slimGame) }, ...prev].slice(0, 20)
       saveJSON(SK.bundles, next)
+      syncPreferences({ bundles: next })
       return next
     })
   }
@@ -208,6 +234,7 @@ export default function SearchPage() {
     setBundles(prev => {
       const next = prev.filter(b => b.id !== id)
       saveJSON(SK.bundles, next)
+      syncPreferences({ bundles: next })
       return next
     })
   }
@@ -238,31 +265,21 @@ export default function SearchPage() {
 
   async function openBackupModal(item) {
     setBackupModal({ isOpen: true, item, targetEmail: '', accounts: [], isLoading: true, progressText: '', progressValue: 0, isCopying: false })
-    
-    // Ambil daftar akun
     try {
-        const res = await fetch('/api/accounts')
+        const res = await fetch('/api/drive/status')
         const data = await res.json()
-        if (data.accounts) {
-            // Sort by driveQuota (sisa storage paling banyak)
-            // driveQuota.free formatnya '10 GB' atau '1 TB'
-            const sorted = data.accounts.sort((a, b) => {
-                const getMB = (str) => {
-                    if (!str) return 0
-                    const [val, unit] = str.split(' ')
-                    let num = parseFloat(val)
-                    if (unit === 'TB') num *= 1024 * 1024
-                    else if (unit === 'GB') num *= 1024
-                    else if (unit === 'MB') num *= 1
-                    return num
-                }
-                return getMB(b.driveQuota?.free) - getMB(a.driveQuota?.free)
+        if (data.workspaces) {
+            const sorted = data.workspaces.sort((a, b) => {
+                const percA = a.storage?.percentage ?? 100
+                const percB = b.storage?.percentage ?? 100
+                return percA - percB
             })
-            // Filter akun yang belum punya game ini
             const existingEmails = new Set(item.sources?.map(s => s.ownerEmail) || [])
-            const available = sorted.filter(a => !existingEmails.has(a.email))
+            const available = sorted.filter(a => !existingEmails.has(a.email) && a.status !== 'limit')
             
             setBackupModal(prev => ({ ...prev, accounts: available, targetEmail: available[0]?.email || '', isLoading: false }))
+        } else {
+             setBackupModal(prev => ({ ...prev, isLoading: false }))
         }
     } catch (e) {
         console.error(e)
@@ -344,25 +361,20 @@ export default function SearchPage() {
   async function openMoveModal(item) {
     setMoveModal({ isOpen: true, item, targetEmail: '', accounts: [], isLoading: true, isMoving: false })
     try {
-        const res = await fetch('/api/accounts')
+        const res = await fetch('/api/drive/status')
         const data = await res.json()
-        if (data.accounts) {
-            const sorted = data.accounts.sort((a, b) => {
-                const getMB = (str) => {
-                    if (!str) return 0
-                    const [val, unit] = str.split(' ')
-                    let num = parseFloat(val)
-                    if (unit === 'TB') num *= 1024 * 1024
-                    else if (unit === 'GB') num *= 1024
-                    else if (unit === 'MB') num *= 1
-                    return num
-                }
-                return getMB(b.driveQuota?.free) - getMB(a.driveQuota?.free)
+        if (data.workspaces) {
+            const sorted = data.workspaces.sort((a, b) => {
+                const percA = a.storage?.percentage ?? 100
+                const percB = b.storage?.percentage ?? 100
+                return percA - percB
             })
             const existingEmails = new Set(item.sources?.map(s => s.ownerEmail) || [])
-            const available = sorted.filter(a => !existingEmails.has(a.email))
+            const available = sorted.filter(a => !existingEmails.has(a.email) && a.status !== 'limit')
             
             setMoveModal(prev => ({ ...prev, accounts: available, targetEmail: available[0]?.email || '', isLoading: false }))
+        } else {
+            setMoveModal(prev => ({ ...prev, isLoading: false }))
         }
     } catch (e) {
         console.error(e)
@@ -428,6 +440,7 @@ export default function SearchPage() {
     setRecentEmails(prev => {
       const next = [v, ...prev.filter(x => x !== v)].slice(0, 6)
       saveJSON(SK.emails, next)
+      syncPreferences({ recentEmails: next })
       return next
     })
   }
@@ -439,6 +452,7 @@ export default function SearchPage() {
       ;[...items, ...prev].forEach(g => { if (!map.has(g.id)) map.set(g.id, g) })
       const next = [...map.values()].slice(0, 10)
       saveJSON(SK.games, next)
+      syncPreferences({ recentGames: next })
       return next
     })
   }
@@ -541,16 +555,15 @@ export default function SearchPage() {
         </div>
       </div>
 
-      <div className="xl:grid xl:grid-cols-[1fr_380px] xl:gap-6 xl:items-start">
-        {/* ── Kolom kiri ── */}
-        <div>
-          <div className="relative mb-4">
+      <div className="xl:grid xl:grid-cols-[1fr_350px] xl:gap-6 xl:items-start">
+        <div className="min-w-0">
+          <div className="relative mb-6">
             <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-3)]" />
             <input
               type="text" value={keyword} onChange={e => setKeyword(e.target.value)}
               onKeyDown={onSearchKeyDown}
               placeholder="Cari game di katalog..."
-              className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] py-2.5 pl-11 pr-10 text-sm text-[var(--text)] placeholder:text-[var(--text-3)] outline-none transition-colors focus:border-[var(--primary)]"
+              className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] py-3 pl-11 pr-10 text-sm font-medium text-[var(--text)] placeholder:text-[var(--text-3)] outline-none transition-colors focus:border-[var(--primary)]"
             />
             {keyword && (
               <button onClick={() => setKeyword('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-3)] transition-colors hover:text-[var(--text)]" title="Bersihkan">
@@ -558,6 +571,21 @@ export default function SearchPage() {
               </button>
             )}
           </div>
+
+          {!keyword && (
+            <div className="mb-6">
+              <QuickPick
+                favorites={favs}
+                recentGames={recentGames}
+                bundles={bundles}
+                isInCart={isInCart}
+                onAdd={addToCart}
+                onAddBundle={addBundleToCart}
+                onToggleFav={toggleFav}
+                onDeleteBundle={deleteBundle}
+              />
+            </div>
+          )}
 
           {/* Hasil kirim — mobile */}
           {sendReport && (
@@ -584,7 +612,7 @@ export default function SearchPage() {
                     </button>
                   </div>
                 </div>
-                <div className="stagger grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="stagger grid grid-cols-1 gap-2.5 lg:grid-cols-2">
                   {results.map((item, index) => {
                     const isActive = index === activeIndex
                     return (
@@ -629,11 +657,11 @@ export default function SearchPage() {
 
         {/* ── Kolom kanan: checkout — desktop ── */}
         <div className="hidden xl:block">
-          <div className="sticky top-4 flex flex-col gap-3">
+          <div className="sticky top-4 flex max-h-[calc(100vh-2rem)] flex-col gap-3 overflow-y-auto scrollbar-hide">
             {sendReport && (
               <SendResult report={sendReport} email={sentTo} onClose={() => setSendReport(null)} onReset={() => { setSendReport(null); setKeyword('') }} />
             )}
-            <div className="overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)]">
+            <div className="flex-1 overflow-hidden rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] flex flex-col">
               <div className="flex items-center justify-between border-b border-[var(--border-soft)] px-4 py-3">
                 <div className="flex items-center gap-2">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)]/15 text-[var(--primary)]"><ShoppingCart size={15} /></span>
@@ -644,7 +672,9 @@ export default function SearchPage() {
                   <button onClick={clearCart} className="text-[11px] font-medium text-[var(--text-3)] transition-colors hover:text-[var(--danger)]">Kosongkan</button>
                 )}
               </div>
-              <CheckoutBody {...checkoutProps} />
+              <div className="flex-1 overflow-y-auto scrollbar-hide">
+                <CheckoutBody {...checkoutProps} />
+              </div>
             </div>
           </div>
         </div>
@@ -696,17 +726,40 @@ export default function SearchPage() {
                                     <Loader2 size={16} className="animate-spin text-[var(--text-3)]" />
                                 </div>
                             ) : backupModal.accounts.length > 0 ? (
-                                <select 
-                                    className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-3 py-2.5 text-sm text-[var(--text)] outline-none"
-                                    value={backupModal.targetEmail}
-                                    onChange={(e) => setBackupModal(prev => ({ ...prev, targetEmail: e.target.value }))}
-                                >
+                                <div className="flex flex-col gap-2 max-h-[45vh] overflow-y-auto scrollbar-hide pb-2">
                                     {backupModal.accounts.map((acc, i) => (
-                                        <option key={acc.email} value={acc.email}>
-                                            {acc.email} - Sisa {acc.driveQuota?.free || '?'} {i === 0 ? '(Paling Kosong)' : ''}
-                                        </option>
+                                        <button
+                                            key={acc.email}
+                                            onClick={() => setBackupModal(prev => ({ ...prev, targetEmail: acc.email }))}
+                                            className={`text-left flex flex-col gap-1.5 rounded-2xl border p-3.5 transition-all ${backupModal.targetEmail === acc.email ? 'border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/40 shadow-[0_0_15px_rgba(255,209,0,0.15)]' : 'border-[var(--border-soft)] bg-[var(--surface)] hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]/50'}`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${backupModal.targetEmail === acc.email ? 'bg-[var(--primary)] text-[var(--primary-fg)]' : 'bg-[var(--elevated)] text-[var(--text-3)]'}`}>
+                                                        <Check size={12} strokeWidth={3} className={backupModal.targetEmail === acc.email ? 'opacity-100' : 'opacity-0'} />
+                                                    </div>
+                                                    <span className="text-[13px] font-bold text-[var(--text)] tracking-tight">{acc.email}</span>
+                                                </div>
+                                                {i === 0 && <span className="text-[9px] bg-[#10b981]/20 text-[#10b981] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Prioritas</span>}
+                                            </div>
+                                            
+                                            <div className="mt-1 pl-8">
+                                                <div className="flex items-center justify-between text-[11px] font-medium text-[var(--text-3)] mb-1.5">
+                                                    <span>Terpakai: {acc.storage?.usageGB || '?'} / {acc.storage?.limitGB || '?'} GB</span>
+                                                    <span className={acc.storage?.percentage > 85 ? 'text-red-400 font-bold' : 'text-[#10b981] font-bold'}>
+                                                        Sisa: {acc.storage?.limitGB ? Math.max(0, parseFloat(acc.storage.limitGB) - parseFloat(acc.storage.usageGB || 0)).toFixed(1) : '?'} GB
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 w-full rounded-full bg-[var(--elevated)] overflow-hidden shadow-inner">
+                                                    <div 
+                                                        className={`h-full rounded-full transition-all ${acc.storage?.percentage > 85 ? 'bg-red-500' : 'bg-[#10b981]'}`} 
+                                                        style={{ width: `${Math.min(100, acc.storage?.percentage || 0)}%` }} 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </button>
                                     ))}
-                                </select>
+                                </div>
                             ) : (
                                 <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">
                                     Semua workspace yang ada sudah memiliki game ini.
@@ -766,17 +819,40 @@ export default function SearchPage() {
                                 Pindahkan ke Workspace:
                             </label>
                             {moveModal.accounts.length > 0 ? (
-                                <select
-                                    value={moveModal.targetEmail}
-                                    onChange={(e) => setMoveModal(prev => ({ ...prev, targetEmail: e.target.value }))}
-                                    className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-4 py-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--primary)]"
-                                >
+                                <div className="flex flex-col gap-2 max-h-[45vh] overflow-y-auto scrollbar-hide pb-2">
                                     {moveModal.accounts.map((acc, i) => (
-                                        <option key={acc.email} value={acc.email}>
-                                            {acc.email} - Sisa {acc.driveQuota?.free || '?'} {i === 0 ? '(Paling Kosong)' : ''}
-                                        </option>
+                                        <button
+                                            key={acc.email}
+                                            onClick={() => setMoveModal(prev => ({ ...prev, targetEmail: acc.email }))}
+                                            className={`text-left flex flex-col gap-1.5 rounded-2xl border p-3.5 transition-all ${moveModal.targetEmail === acc.email ? 'border-[var(--primary)] bg-[var(--primary)]/10 ring-1 ring-[var(--primary)]/40 shadow-[0_0_15px_rgba(255,209,0,0.15)]' : 'border-[var(--border-soft)] bg-[var(--surface)] hover:border-[var(--border-strong)] hover:bg-[var(--elevated)]/50'}`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${moveModal.targetEmail === acc.email ? 'bg-[var(--primary)] text-[var(--primary-fg)]' : 'bg-[var(--elevated)] text-[var(--text-3)]'}`}>
+                                                        <Check size={12} strokeWidth={3} className={moveModal.targetEmail === acc.email ? 'opacity-100' : 'opacity-0'} />
+                                                    </div>
+                                                    <span className="text-[13px] font-bold text-[var(--text)] tracking-tight">{acc.email}</span>
+                                                </div>
+                                                {i === 0 && <span className="text-[9px] bg-[#10b981]/20 text-[#10b981] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Prioritas</span>}
+                                            </div>
+                                            
+                                            <div className="mt-1 pl-8">
+                                                <div className="flex items-center justify-between text-[11px] font-medium text-[var(--text-3)] mb-1.5">
+                                                    <span>Terpakai: {acc.storage?.usageGB || '?'} / {acc.storage?.limitGB || '?'} GB</span>
+                                                    <span className={acc.storage?.percentage > 85 ? 'text-red-400 font-bold' : 'text-[#10b981] font-bold'}>
+                                                        Sisa: {acc.storage?.limitGB ? Math.max(0, parseFloat(acc.storage.limitGB) - parseFloat(acc.storage.usageGB || 0)).toFixed(1) : '?'} GB
+                                                    </span>
+                                                </div>
+                                                <div className="h-1.5 w-full rounded-full bg-[var(--elevated)] overflow-hidden shadow-inner">
+                                                    <div 
+                                                        className={`h-full rounded-full transition-all ${acc.storage?.percentage > 85 ? 'bg-red-500' : 'bg-[#10b981]'}`} 
+                                                        style={{ width: `${Math.min(100, acc.storage?.percentage || 0)}%` }} 
+                                                    />
+                                                </div>
+                                            </div>
+                                        </button>
                                     ))}
-                                </select>
+                                </div>
                             ) : (
                                 <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">
                                     Semua workspace yang ada sudah memiliki game ini.

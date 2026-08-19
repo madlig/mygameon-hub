@@ -6,7 +6,7 @@ export default function DashboardLayout({ children }) {
     <div className="flex h-screen bg-[var(--bg)] text-[var(--text)]">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <main className="fadeUp flex-1 overflow-y-auto p-[var(--pad-card)] pb-28 md:pb-[var(--pad-card)]">
+        <main className="fadeUp flex-1 overflow-y-auto px-[var(--pad-card)] pb-28 md:pb-[var(--pad-card)]">
           {children}
         </main>
       </div>
