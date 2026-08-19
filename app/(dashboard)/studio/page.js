@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   HardDrive, FolderOpen, AlertCircle, Loader2, UploadCloud,
   CheckCircle2, ChevronRight, Server, FileArchive, Settings2,
-  Trash2, Plus, Store, Cloud, Clock, CheckSquare, Square
+  Trash2, Plus, Store, Cloud, Clock, CheckSquare, Square, ChevronDown
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 
@@ -27,6 +27,7 @@ export default function StudioPage() {
   const [selectedFolder, setSelectedFolder] = useState(null)
   const [targetWorkspace, setTargetWorkspace] = useState(null)
   const [workspaces, setWorkspaces] = useState([])
+  const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
   const [processState, setProcessState] = useState({ status: 'idle', progress: 0, text: '' })
   const [isElectron, setIsElectron] = useState(true)
   
@@ -246,21 +247,77 @@ export default function StudioPage() {
                     <p className="text-[10px] text-[var(--text-3)] font-mono truncate">{selectedFolder.path}</p>
                   </div>
 
-                  {/* Dropdown Workspace */}
-                  <div className="mb-4">
+                  {/* Dropdown Workspace Modern */}
+                  <div className="mb-4 relative">
                     <label className="block text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)] mb-2">Target Workspace</label>
-                    <select 
-                      className="w-full rounded-xl border border-[var(--border-strong)] bg-[var(--elevated)] px-3 py-2.5 text-sm font-semibold outline-none focus:border-[var(--primary)]"
-                      value={targetWorkspace?.email || ''}
-                      onChange={e => setTargetWorkspace(workspaces.find(w => w.email === e.target.value))}
+                    
+                    <button 
+                      onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
+                      className={`w-full flex items-center justify-between rounded-xl border px-3 py-3 text-sm font-semibold transition-all ${
+                        isWorkspaceDropdownOpen 
+                          ? 'border-[var(--primary)] bg-[var(--primary)]/5 shadow-[0_0_0_2px_rgba(255,209,0,0.1)]' 
+                          : 'border-[var(--border-strong)] bg-[var(--elevated)] hover:bg-[var(--surface)] hover:border-[var(--border-soft)]'
+                      }`}
                     >
-                      <option value="" disabled>-- Pilih Akun Google Drive --</option>
-                      {workspaces.map(ws => (
-                        <option key={ws.email} value={ws.email}>
-                          {ws.email} {ws.storage ? `(${ws.storage.usageGB}/${ws.storage.limitGB} GB)` : ''}
-                        </option>
-                      ))}
-                    </select>
+                      {targetWorkspace ? (
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex shrink-0 items-center justify-center w-8 h-8 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
+                            <Cloud size={16} />
+                          </div>
+                          <div className="flex flex-col items-start min-w-0">
+                            <span className="text-[var(--text)] truncate block w-full">{targetWorkspace.email}</span>
+                            {targetWorkspace.storage && (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <div className="w-16 h-1.5 rounded-full bg-black/20 overflow-hidden">
+                                  <div className="h-full bg-[var(--primary)]" style={{ width: `${(targetWorkspace.storage.usageGB / targetWorkspace.storage.limitGB) * 100}%` }} />
+                                </div>
+                                <span className="text-[9px] font-mono text-[var(--text-4)]">{targetWorkspace.storage.usageGB} / {targetWorkspace.storage.limitGB} GB</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-[var(--text-4)]">-- Pilih Akun Google Drive --</span>
+                      )}
+                      <ChevronDown size={16} className={`text-[var(--text-3)] transition-transform duration-300 ${isWorkspaceDropdownOpen ? 'rotate-180 text-[var(--primary)]' : ''}`} />
+                    </button>
+
+                    {/* Dropdown List */}
+                    {isWorkspaceDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsWorkspaceDropdownOpen(false)} />
+                        <div className="absolute top-full left-0 right-0 mt-2 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2">
+                          {workspaces.length === 0 ? (
+                            <div className="p-4 text-center text-xs text-[var(--text-4)]">Memuat workspace...</div>
+                          ) : (
+                            workspaces.map(ws => (
+                              <button
+                                key={ws.email}
+                                onClick={() => { setTargetWorkspace(ws); setIsWorkspaceDropdownOpen(false) }}
+                                className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors ${
+                                  targetWorkspace?.email === ws.email ? 'bg-[var(--primary)]/10' : 'hover:bg-[var(--elevated)]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={`flex shrink-0 items-center justify-center w-7 h-7 rounded-lg ${
+                                    targetWorkspace?.email === ws.email ? 'bg-[var(--primary)] text-black' : 'bg-[var(--elevated)] text-[var(--text-3)]'
+                                  }`}>
+                                    <Cloud size={14} />
+                                  </div>
+                                  <div className="flex flex-col items-start min-w-0">
+                                    <span className={`text-xs font-bold truncate ${targetWorkspace?.email === ws.email ? 'text-[var(--primary)]' : 'text-[var(--text-2)]'}`}>{ws.email}</span>
+                                    {ws.storage && (
+                                      <span className="text-[9px] text-[var(--text-4)] font-mono">{ws.storage.usageGB}GB used of {ws.storage.limitGB}GB</span>
+                                    )}
+                                  </div>
+                                </div>
+                                {targetWorkspace?.email === ws.email && <CheckCircle2 size={16} className="text-[var(--primary)]" />}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Advanced Settings */}
@@ -292,7 +349,7 @@ export default function StudioPage() {
                             </div>
                         </div>
                         <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--border-soft)]">
-                            <label className="text-[11px] font-semibold text-red-400">Auto-Delete Folder Lokal</label>
+                            <label className="text-[11px] font-semibold text-red-400">Auto-Uninstall / Delete Game Lokal</label>
                             <input type="checkbox" checked={rarConfig.autoDelete} onChange={e => setRarConfig({...rarConfig, autoDelete: e.target.checked})} className="accent-red-500" />
                         </div>
                       </div>

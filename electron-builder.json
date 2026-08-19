@@ -18,11 +18,13 @@
     "main": "main.js"
   },
   "win": {
-    "target": "squirrel"
+    "target": "nsis"
   },
-  "squirrelWindows": {
-    "iconUrl": "https://mygameon-hub.vercel.app/icon.ico",
-    "loadingGif": "build/install-spinner.gif"
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
   },
   "publish": {
     "provider": "github",

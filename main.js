@@ -111,6 +111,18 @@ function setupAutoUpdater() {
     }
   });
 
+  autoUpdater.on('update-not-available', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update_not_available', info);
+    }
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update_progress', progressObj);
+    }
+  });
+
   autoUpdater.on('update-downloaded', (info) => {
     console.log('Update downloaded:', info.version);
     if (mainWindow) {
@@ -120,11 +132,19 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('AutoUpdater error:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('update_error', err.message);
+    }
   });
 
   // Jalankan pengecekan
   autoUpdater.checkForUpdatesAndNotify();
 }
+
+ipcMain.on('check-for-updates', () => {
+  if (!app.isPackaged) return;
+  autoUpdater.checkForUpdates();
+});
 
 ipcMain.on('quit-and-install', () => {
   if (!app.isPackaged) return;
