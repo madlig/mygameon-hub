@@ -3,7 +3,7 @@ import { getClientForEmail } from '@/lib/googleClient'
 import connectDB from '@/lib/db'
 import GameCatalog from '@/models/GameCatalog'
 
-const SHARED_DRIVE_ID = '0ALxyHsjPxl82Uk9PVA'
+// const SHARED_DRIVE_ID = '0ALxyHsjPxl82Uk9PVA' // Tidak dipakai lagi karena direct transfer
 
 export async function POST(req) {
   try {
@@ -25,40 +25,41 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Record sumber tidak ditemukan di katalog' }, { status: 404 })
     }
 
-    // 2. Kredensial Source: Pindahkan dari My Drive (root) ke Shared Drive
+    // 2. Berikan akses & transfer kepemilikan ke targetEmail
     const sourceDrive = await getClientForEmail(sourceEmail)
     
-    // Dapatkan current parents
-    const fileMeta = await sourceDrive.files.get({
-        fileId: folderId,
-        fields: 'parents',
-        supportsAllDrives: true,
-    })
-    const previousParents = fileMeta.data.parents ? fileMeta.data.parents.join(',') : ''
-
-    await sourceDrive.files.update({
+    await sourceDrive.permissions.create({
       fileId: folderId,
-      addParents: SHARED_DRIVE_ID,
-      removeParents: previousParents,
-      supportsAllDrives: true,
+      transferOwnership: true,
+      requestBody: {
+        role: 'owner',
+        type: 'user',
+        emailAddress: targetEmail
+      }
     })
 
-    // 3. Kredensial Target: Pindahkan dari Shared Drive ke My Drive (root) target
+    // 3. Kredensial Target: Pindahkan folder ke "My Drive" (root) target
     const targetDrive = await getClientForEmail(targetEmail)
     
-    // Gunakan folder target root yang tepat
+    // Dapatkan ID root milik target
     const targetFileMeta = await targetDrive.files.get({
         fileId: 'root',
         fields: 'id',
-        supportsAllDrives: true,
     })
     const targetRootId = targetFileMeta.data.id
 
+    // Dapatkan list parents saat ini (biasanya kosong atau masuk di 'Shared with me' setelah transfer)
+    const folderMeta = await targetDrive.files.get({
+        fileId: folderId,
+        fields: 'parents',
+    })
+    const previousParents = folderMeta.data.parents ? folderMeta.data.parents.join(',') : ''
+
+    // Tambahkan ke My Drive si Target
     await targetDrive.files.update({
       fileId: folderId,
       addParents: targetRootId,
-      removeParents: SHARED_DRIVE_ID,
-      supportsAllDrives: true,
+      removeParents: previousParents,
     })
 
     // 4. Update Database

@@ -277,6 +277,14 @@ body[data-sb="collapsed"] {
 .animate-sheet { animation: sheetUp 0.24s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-scale { animation: scaleIn 0.18s ease-out both; }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 /* Staggered list reveal */
 .stagger > * { animation: fadeUp 0.32s ease-out both; }
 .stagger > *:nth-child(1) { animation-delay: 0.02s; }
@@ -327,3 +335,4 @@ button, a, input, select, textarea, label {
     font-size: 16px !important;
   }
 }
+@keyframes stripes { 0% { background-position: 1rem 0; } 100% { background-position: 0 0; } } 

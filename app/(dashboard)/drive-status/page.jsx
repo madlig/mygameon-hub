@@ -209,9 +209,9 @@ export default function DriveStatusPage() {
       <div className="flex-1 overflow-y-auto px-[var(--pad-card)] pb-[var(--pad-card)] relative">
         <div className="mb-6 flex items-end justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-[var(--text)]">Pantau Kuota Download</h2>
+            <h2 className="text-xl font-bold tracking-tight text-[var(--text)]">Status Storage & Akses Drive</h2>
             <p className="mt-1 text-sm text-[var(--text-2)]">
-              Status limitasi per email workspace secara real-time. Klik baris untuk melihat daftar game.
+              Status kapasitas penyimpanan (storage) per email workspace. 
             </p>
           </div>
           <button
@@ -229,6 +229,17 @@ export default function DriveStatusPage() {
             {error}
           </div>
         )}
+
+        <div className="mb-6 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
+          <h4 className="text-sm font-bold text-yellow-600 mb-1 flex items-center gap-2">
+            <AlertTriangle size={16} /> Penting: Tentang "Limit Quota Download"
+          </h4>
+          <p className="text-xs text-yellow-600/80 leading-relaxed">
+            Halaman ini hanya memantau <strong>Kapasitas Storage (Ruang Penyimpanan)</strong>, bukan Kuota Download (Bandwidth). Google Drive tidak menyediakan cara untuk mengecek Kuota Download. Jika customer mengeluh terkena limit download meskipun status storage di sini "Aman", itu berarti file tersebut sedang di-download oleh terlalu banyak orang dalam 24 jam terakhir. 
+            <br/><br/>
+            <strong>Solusi:</strong> Minta customer untuk menggunakan trik Bypass (tambahkan <i>shortcut</i> ke My Drive mereka dan download folder tersebut), atau gunakan fitur "Pindah Instan" untuk menggandakan game ini ke Workspace lain agar beban download terbagi.
+          </p>
+        </div>
 
         {/* SUMMARY CARDS */}
         {data && (

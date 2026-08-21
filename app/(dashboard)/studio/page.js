@@ -46,8 +46,6 @@ export default function StudioPage() {
   useEffect(() => {
     if (typeof window !== 'undefined' && !window.electronAPI) {
       setIsElectron(false)
-      setLoading(false)
-      return
     }
 
     fetchScan()
@@ -61,13 +59,25 @@ export default function StudioPage() {
 
   async function checkStatus() {
     try {
-      const res = await fetch('/api/studio/status')
-      const state = await res.json()
-      if (state && state.status) {
-        setProcessState(state)
-        if (state.status === 'success' && processState.status === 'processing') {
-            fetchScan()
-            fetchHistory() // Refresh history after upload
+      if (isElectron) {
+        const res = await fetch('/api/studio/status')
+        const state = await res.json()
+        if (state && state.status) {
+          setProcessState(state)
+          if (state.status === 'success' && processState.status === 'processing') {
+              fetchScan()
+              fetchHistory()
+          }
+        }
+      } else {
+        // C2 Remote Mode
+        const res = await fetch('/api/c2/state')
+        const json = await res.json()
+        if (json.success && json.state && json.state.currentTask) {
+          setProcessState(json.state.currentTask)
+          if (json.state.currentTask.status === 'success' && processState.status === 'processing') {
+            fetchHistory()
+          }
         }
       }
     } catch (e) {}
@@ -76,9 +86,18 @@ export default function StudioPage() {
   async function fetchScan() {
     setLoading(true)
     try {
-      const res = await fetch('/api/studio/scan')
-      const json = await res.json()
-      if (json.success) setData(json)
+      if (isElectron) {
+        const res = await fetch('/api/studio/scan')
+        const json = await res.json()
+        if (json.success) setData(json)
+      } else {
+        // C2 Remote Mode
+        const res = await fetch('/api/c2/state')
+        const json = await res.json()
+        if (json.success && json.state) {
+          setData({ folders: json.state.folders || [], disks: [] })
+        }
+      }
     } catch (err) {} finally { setLoading(false) }
   }
 
@@ -110,11 +129,23 @@ export default function StudioPage() {
     if (!selectedFolder || !targetWorkspace) return
     try {
       setProcessState({ status: 'processing', progress: 0, text: 'Mengirim perintah...' })
-      await fetch('/api/studio/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderPath: selectedFolder.path, targetEmail: targetWorkspace.email, config: rarConfig })
-      })
+      if (isElectron) {
+        await fetch('/api/studio/process', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderPath: selectedFolder.path, targetEmail: targetWorkspace.email, config: rarConfig })
+        })
+      } else {
+        // C2 Remote Mode
+        await fetch('/api/c2/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'START_UPLOAD',
+            payload: { folderPath: selectedFolder.path, targetEmail: targetWorkspace.email, config: rarConfig }
+          })
+        })
+      }
     } catch (e) {}
   }
 
@@ -160,16 +191,8 @@ export default function StudioPage() {
   }
 
   if (!isElectron) {
-    return (
-      <div className="fadeUp pb-24 h-full flex flex-col">
-        <TopBar title="Workspace Studio" />
-        <div className="flex flex-col items-center justify-center h-[60vh] text-center px-6">
-          <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-4"><AlertCircle size={32} /></div>
-          <h2 className="text-xl font-bold mb-2 text-[var(--text)]">Desktop Version Only</h2>
-          <p className="text-sm text-[var(--text-3)] max-w-md">Fitur ini hanya dapat diakses melalui perangkat Desktop menggunakan Aplikasi MyGameON lokal.</p>
-        </div>
-      </div>
-    )
+    // We are in Mobile Web mode, do not block. We will show the same UI using C2 state.
+    // Ensure we have a persistent interval running since isElectron check might block it initially
   }
 
   return (
@@ -219,14 +242,14 @@ export default function StudioPage() {
                     <button 
                       key={folder.name}
                       onClick={() => setSelectedFolder(folder)}
-                      className={`w-full flex items-center justify-between rounded-lg px-3 py-2 transition-colors ${
+                      className={`group w-full flex items-center justify-between rounded-xl px-4 py-3 transition-all duration-300 ${
                         selectedFolder?.name === folder.name 
-                        ? 'bg-[var(--primary)]/10 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(255,209,0,0.3)]' 
-                        : 'bg-transparent text-[var(--text-2)] hover:bg-[var(--elevated)]'
+                        ? 'bg-gradient-to-r from-[var(--primary)]/20 to-[var(--primary)]/5 text-[var(--primary)] shadow-[inset_0_0_0_1px_rgba(255,209,0,0.5)] scale-[1.02]' 
+                        : 'bg-transparent text-[var(--text-2)] hover:bg-[var(--elevated)] hover:scale-[1.01]'
                       }`}
                     >
-                      <span className="font-semibold text-[13px] truncate pr-4">{folder.name}</span>
-                      {selectedFolder?.name === folder.name && <ChevronRight size={14} />}
+                      <span className={`font-bold text-[13px] truncate pr-4 transition-colors ${selectedFolder?.name === folder.name ? 'text-[var(--primary)]' : 'group-hover:text-[var(--text)]'}`}>{folder.name}</span>
+                      {selectedFolder?.name === folder.name && <ChevronRight size={16} className="animate-in slide-in-from-left-2" />}
                     </button>
                   ))
                 )}
@@ -358,32 +381,48 @@ export default function StudioPage() {
 
                   {/* Proses Monitor */}
                   {processState.status !== 'idle' && (
-                    <div className={`mb-4 rounded-xl p-3 text-xs ${
-                      processState.status === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
-                      processState.status === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
-                      'bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20'
+                    <div className={`mb-4 relative overflow-hidden rounded-2xl p-4 text-xs transition-all duration-500 shadow-lg ${
+                      processState.status === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/30 shadow-red-500/10' :
+                      processState.status === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/30 shadow-green-500/10' :
+                      'bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/30 shadow-[var(--primary)]/10'
                     }`}>
-                      <div className="flex items-center justify-between font-bold mb-1.5">
-                        <span>{processState.status === 'processing' ? 'Proses...' : processState.status === 'error' ? 'Error' : 'Berhasil'}</span>
-                        <span>{processState.progress}%</span>
+                      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/5 to-transparent opacity-50 pointer-events-none" />
+                      <div className="flex items-center justify-between font-extrabold mb-2 text-sm">
+                        <span className="flex items-center gap-2">
+                          {processState.status === 'processing' && <Loader2 size={14} className="animate-spin" />}
+                          {processState.status === 'processing' ? 'MEMPROSES...' : processState.status === 'error' ? 'GAGAL' : 'SELESAI'}
+                        </span>
+                        <span className="text-[var(--primary)] drop-shadow-md">{processState.progress}%</span>
                       </div>
-                      <div className="w-full h-1 bg-black/10 rounded-full overflow-hidden mb-2">
-                        <div className={`h-full transition-all duration-500 ${processState.status === 'error' ? 'bg-red-500' : processState.status === 'success' ? 'bg-green-500' : 'bg-[var(--primary)]'}`} style={{ width: `${processState.progress}%` }} />
+                      <div className="w-full h-2 bg-black/20 rounded-full overflow-hidden mb-3 shadow-inner relative">
+                        <div className={`absolute top-0 left-0 h-full transition-all duration-500 ease-out rounded-full ${processState.status === 'error' ? 'bg-red-500' : processState.status === 'success' ? 'bg-green-500' : 'bg-gradient-to-r from-[var(--primary)] to-yellow-300'}`} style={{ width: `${processState.progress}%` }}>
+                          {processState.status === 'processing' && (
+                            <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.2)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.2)_50%,rgba(255,255,255,0.2)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[stripes_1s_linear_infinite]" />
+                          )}
+                        </div>
                       </div>
-                      <p className="text-[10px] truncate opacity-80">{processState.text}</p>
+                      <p className="text-[11px] font-medium truncate opacity-90">{processState.text}</p>
                     </div>
                   )}
 
                   <button 
                     onClick={startProcessing}
                     disabled={!targetWorkspace || processState.status === 'processing'}
-                    className={`w-full rounded-xl py-3 text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                    className={`w-full relative overflow-hidden rounded-2xl py-4 text-sm font-extrabold transition-all duration-300 flex items-center justify-center gap-2 group ${
                       !targetWorkspace ? 'bg-[var(--elevated)] text-[var(--text-4)] cursor-not-allowed'
-                      : processState.status === 'processing' ? 'bg-[var(--primary)]/50 text-[var(--text)] cursor-wait'
-                      : 'bg-[var(--primary)] text-[var(--primary-fg)] hover:brightness-105'
+                      : processState.status === 'processing' ? 'bg-gradient-to-r from-[var(--primary)]/40 to-yellow-500/40 text-[var(--text)] cursor-wait shadow-none'
+                      : 'bg-gradient-to-r from-[var(--primary)] to-yellow-400 text-black shadow-[0_4px_20px_rgba(255,209,0,0.4)] hover:shadow-[0_6px_25px_rgba(255,209,0,0.6)] hover:-translate-y-0.5'
                     }`}
                   >
-                    {processState.status === 'processing' ? <><Loader2 size={16} className="animate-spin" /> Memproses</> : <><UploadCloud size={16} /> Mulai Eksekusi</>}
+                    {processState.status === 'processing' ? (
+                      <><Loader2 size={18} className="animate-spin" /> MENGIRIM PERINTAH C2...</>
+                    ) : (
+                      <>
+                        <UploadCloud size={18} className="transition-transform group-hover:-translate-y-1" /> 
+                        <span className="tracking-wide uppercase">Eksekusi Remote Upload</span>
+                        <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-20 transition-opacity bg-white mix-blend-overlay" />
+                      </>
+                    )}
                   </button>
                 </>
               )}

@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import {
   Search, Settings, Clock, Users, Gamepad2, Grid2X2,
-  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud
+  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud, Telescope, DownloadCloud, RefreshCw
 } from 'lucide-react'
 
 const navGroups = [
@@ -14,6 +14,7 @@ const navGroups = [
     label: 'General Games',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard' },
+      { href: '/scout', icon: Telescope, label: 'Game Scout (AI)' },
       { href: '/search', icon: Search, label: 'Cari Game' },
       { href: '/revoke', icon: Users, label: 'CRM Pelanggan' },
     ],
@@ -40,6 +41,42 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { data: session, status } = useSession()
   const [driveLimit, setDriveLimit] = useState(null)
+  
+  const [isClient, setIsClient] = useState(false)
+  const [updateReady, setUpdateReady] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState(null) // 'checking', 'downloading', 'ready', 'error'
+  const [updateProgress, setUpdateProgress] = useState(0)
+
+  useEffect(() => {
+    setIsClient(true)
+    // Listen for auto-update events
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.onUpdateAvailable(() => {
+        setUpdateStatus('downloading')
+      })
+      window.electronAPI.onUpdateNotAvailable(() => {
+        if (updateStatus === 'checking') setUpdateStatus(null)
+      })
+      window.electronAPI.onUpdateProgress((info) => {
+        if (info.percent) setUpdateProgress(Math.round(info.percent))
+      })
+      window.electronAPI.onUpdateDownloaded(() => {
+        setUpdateReady(true)
+        setUpdateStatus('ready')
+      })
+      window.electronAPI.onUpdateError(() => {
+        setUpdateStatus('error')
+        setTimeout(() => setUpdateStatus(null), 3000)
+      })
+    }
+  }, [updateStatus])
+
+  const checkForUpdates = () => {
+    if (window.electronAPI) {
+      setUpdateStatus('checking')
+      window.electronAPI.checkForUpdates()
+    }
+  }
 
   useEffect(() => {
     if (status === 'authenticated') {
@@ -163,6 +200,46 @@ export default function Sidebar() {
             <div className="absolute inset-0 bg-red-500/10 animate-pulse pointer-events-none" />
           )}
         </div>
+        
+        {/* Update Button Area */}
+        {isClient && window.electronAPI && (
+          <div className="mt-3">
+            {updateReady ? (
+              <button
+                onClick={() => window.electronAPI?.quitAndInstall()}
+                className="pressable w-full animate-in slide-in-from-top-2 fade-in duration-300 flex items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/15 px-3 py-2 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:bg-purple-500/25 transition-colors"
+              >
+                <span className="relative flex h-2 w-2 items-center justify-center">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-purple-500"></span>
+                </span>
+                <span className="text-[11px] font-bold text-purple-400 tracking-wide">
+                  Install Update!
+                </span>
+              </button>
+            ) : updateStatus === 'downloading' ? (
+              <div className="w-full flex items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2">
+                <RefreshCw size={14} className="animate-spin text-blue-400" />
+                <span className="text-[11px] font-bold text-blue-400 tracking-wide">
+                  Unduh {updateProgress}%
+                </span>
+              </div>
+            ) : (
+              <button
+                onClick={checkForUpdates}
+                disabled={updateStatus === 'checking'}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-strong)] bg-black/20 px-3 py-2 text-[11px] font-semibold text-[var(--text-3)] transition-colors hover:bg-white/5 disabled:opacity-50"
+              >
+                {updateStatus === 'checking' ? (
+                  <RefreshCw size={14} className="animate-spin text-[var(--text-3)]" />
+                ) : (
+                  <DownloadCloud size={14} />
+                )}
+                {updateStatus === 'checking' ? 'Mengecek...' : 'Cek Update Sistem'}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   )

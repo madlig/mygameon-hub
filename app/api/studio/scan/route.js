@@ -1,10 +1,27 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
 import { auth } from '@/app/api/auth/[...nextauth]/route'
+import connectDB from '@/lib/db'
+import mongoose from 'mongoose'
 
-// Konfigurasi Lokasi Folder Kerja
-const UPLOAD_DIR = process.env.STUDIO_UPLOAD_DIR || 'D:\\Game\\Shopee\\GameUpload'
+const desktopStateSchema = new mongoose.Schema({
+  machineId: String,
+  isOnline: Boolean,
+  lastSeen: Date,
+  folders: [{ name: String, path: String }],
+  currentTask: {
+    status: String,
+    progress: Number,
+    text: String,
+    commandId: String
+  }
+}, { timestamps: true })
+
+let DesktopState
+try {
+  DesktopState = mongoose.model('DesktopState')
+} catch (e) {
+  DesktopState = mongoose.model('DesktopState', desktopStateSchema)
+}
 
 export async function GET(request) {
   try {
@@ -13,43 +30,23 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!fs.existsSync(UPLOAD_DIR)) {
+    await connectDB()
+    const state = await DesktopState.findOne({ machineId: 'mygameon-pc-1' })
+
+    if (!state || !state.isOnline) {
       return NextResponse.json({ 
         success: false, 
-        error: `Folder tidak ditemukan: ${UPLOAD_DIR}`, 
-        path: UPLOAD_DIR,
+        error: `Desktop PC Offline. Pastikan Zombi Pekerja berjalan di PC Anda.`, 
+        path: '-',
         items: [] 
       })
     }
 
-    // Membaca isi direktori
-    const items = fs.readdirSync(UPLOAD_DIR, { withFileTypes: true })
-    
-    // Memfilter HANYA yang berbentuk Folder/Direktori
-    // (Karena game biasanya berada di dalam foldernya sendiri sebelum di archive)
-    const folders = items
-      .filter(item => item.isDirectory())
-      .map(dir => {
-        const fullPath = path.join(UPLOAD_DIR, dir.name)
-        // Hitung total size dan jumlah file di dalamnya secara kasar (opsional, bisa lambat jika filenya jutaan)
-        // Untuk kecepatan scan, kita hanya kembalikan nama foldernya saja
-        return {
-          name: dir.name,
-          path: fullPath
-        }
-      })
-
-    // Cari juga file .rar atau .zip yang mungkin berserakan di root UPLOAD_DIR
-    // Untuk berjaga-jaga jika ada sisa arsip sebelumnya
-    const archives = items
-      .filter(item => !item.isDirectory() && (item.name.endsWith('.rar') || item.name.endsWith('.zip')))
-      .map(file => ({ name: file.name, path: path.join(UPLOAD_DIR, file.name) }))
-
     return NextResponse.json({
       success: true,
-      path: UPLOAD_DIR,
-      folders,
-      archives
+      path: 'D:\\Game\\Shopee\\GameUpload (via C2)',
+      folders: state.folders || [],
+      archives: []
     })
 
   } catch (err) {

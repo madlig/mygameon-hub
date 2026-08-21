@@ -8,42 +8,9 @@ import { useEffect, useState } from 'react'
 
 export default function TopBar({ title, backHref }) {
   const { data: session } = useSession()
-  const [updateReady, setUpdateReady] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState(null) // 'checking', 'downloading', 'ready', 'error'
-  const [updateProgress, setUpdateProgress] = useState(0)
   const pathname = usePathname()
 
-  useEffect(() => {
-    // Listen for auto-update events
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      window.electronAPI.onUpdateAvailable(() => {
-        setUpdateStatus('downloading')
-      })
-      window.electronAPI.onUpdateNotAvailable(() => {
-        if (updateStatus === 'checking') setUpdateStatus(null)
-      })
-      window.electronAPI.onUpdateProgress((info) => {
-        if (info.percent) setUpdateProgress(Math.round(info.percent))
-      })
-      window.electronAPI.onUpdateDownloaded(() => {
-        setUpdateReady(true)
-        setUpdateStatus('ready')
-      })
-      window.electronAPI.onUpdateError(() => {
-        setUpdateStatus('error')
-        setTimeout(() => setUpdateStatus(null), 3000)
-      })
-    }
-  }, [updateStatus])
 
-  const checkForUpdates = () => {
-    if (window.electronAPI) {
-      setUpdateStatus('checking')
-      window.electronAPI.checkForUpdates()
-    }
-  }
-
-  // Auto-generate Breadcrumbs based on pathname
   const getBreadcrumbs = () => {
     let category = 'Lainnya'
     if (['/', '/search', '/revoke'].includes(pathname)) category = 'General Games'
@@ -91,42 +58,6 @@ export default function TopBar({ title, backHref }) {
 
         {/* Kanan: Profil & Actions */}
         <div className="flex shrink-0 items-center gap-3 mr-28 sm:mr-32" style={{ WebkitAppRegion: 'no-drag' }}>
-          {/* UPDATE PROGRESS / READY NOTIFICATION */}
-          {updateReady ? (
-            <button
-              onClick={() => window.electronAPI?.quitAndInstall()}
-              className="pressable animate-in slide-in-from-top-2 fade-in duration-300 flex items-center gap-2 rounded-full border border-purple-500/40 bg-purple-500/15 px-3 py-1.5 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:bg-purple-500/25 transition-colors"
-            >
-              <span className="relative flex h-2 w-2 items-center justify-center">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-purple-400 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-purple-500"></span>
-              </span>
-              <span className="hidden text-[11px] font-bold text-purple-400 sm:inline tracking-wide">
-                Update Siap Diinstal!
-              </span>
-            </button>
-          ) : updateStatus === 'downloading' ? (
-            <div className="flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5">
-              <RefreshCw size={14} className="animate-spin text-blue-400" />
-              <span className="hidden text-[11px] font-bold text-blue-400 sm:inline tracking-wide">
-                Mengunduh... {updateProgress}%
-              </span>
-            </div>
-          ) : updateStatus === 'checking' ? (
-            <div className="flex items-center gap-2 rounded-full border border-gray-500/30 bg-gray-500/10 px-3 py-1.5">
-              <RefreshCw size={14} className="animate-spin text-gray-400" />
-              <span className="hidden text-[11px] font-bold text-gray-400 sm:inline tracking-wide">
-                Mengecek update...
-              </span>
-            </div>
-          ) : updateStatus === 'error' ? (
-            <div className="flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1.5">
-              <span className="hidden text-[11px] font-bold text-red-400 sm:inline tracking-wide">
-                Update gagal.
-              </span>
-            </div>
-          ) : null}
-
           {/* Icon Actions */}
           <div className="hidden items-center gap-1 sm:flex">
             <button className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-3)] transition-colors hover:bg-white/10 hover:text-[var(--text)]">
@@ -151,16 +82,9 @@ export default function TopBar({ title, backHref }) {
                 A
               </div>
               
-              {/* Dropdown Menu (Hover) */}
-              <div className="absolute right-0 top-full mt-2 hidden w-48 flex-col rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-2xl group-hover:flex">
-                <button
-                  onClick={checkForUpdates}
-                  disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-[var(--text-2)] transition-colors hover:bg-white/5 disabled:opacity-50"
-                >
-                  <DownloadCloud size={14} /> Cek Update Sistem
-                </button>
-                <div className="my-1 h-px w-full bg-white/10" />
+              {/* Dropdown Menu (Hover) - ditambahkan before:absolute bridge agar hover tidak hilang saat gap mt-2 */}
+              <div className="absolute right-0 top-full mt-2 hidden w-48 flex-col rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-2xl group-hover:flex before:absolute before:-top-2 before:left-0 before:h-2 before:w-full">
+
                 <button
                   onClick={() => signOut({ callbackUrl: '/login' })}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/10"

