@@ -12,7 +12,10 @@
     "package.json",
     ".next/standalone/**/*",
     "public/**/*",
-    ".env.local"
+    ".env.local",
+    "lib/**/*",
+    "models/**/*",
+    "scripts/**/*"
   ],
   "extraMetadata": {
     "main": "main.js"
