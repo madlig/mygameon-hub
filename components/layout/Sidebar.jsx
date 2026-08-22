@@ -46,11 +46,14 @@ export default function Sidebar() {
   const [updateReady, setUpdateReady] = useState(false)
   const [updateStatus, setUpdateStatus] = useState(null) // 'checking', 'downloading', 'ready', 'error'
   const [updateProgress, setUpdateProgress] = useState(0)
+  const [appVersion, setAppVersion] = useState('')
 
   useEffect(() => {
     setIsClient(true)
     // Listen for auto-update events
     if (typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.getAppVersion().then(ver => setAppVersion(ver)).catch(() => {})
+      
       window.electronAPI.onUpdateAvailable(() => {
         setUpdateStatus('downloading')
       })
@@ -237,6 +240,14 @@ export default function Sidebar() {
                 )}
                 {updateStatus === 'checking' ? 'Mengecek...' : 'Cek Update Sistem'}
               </button>
+            )}
+            
+            {appVersion && (
+              <div className="mt-2 text-center">
+                <span className="text-[10px] font-bold text-[var(--text-4)] tracking-widest uppercase">
+                  Versi {appVersion}
+                </span>
+              </div>
             )}
           </div>
         )}

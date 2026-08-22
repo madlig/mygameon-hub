@@ -143,7 +143,10 @@ function setupAutoUpdater() {
 }
 
 ipcMain.on('check-for-updates', () => {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged) {
+    if (mainWindow) mainWindow.webContents.send('update_not_available', { version: 'dev' });
+    return;
+  }
   autoUpdater.checkForUpdates();
 });
 
