@@ -44,7 +44,7 @@ export async function GET(request) {
 
     return NextResponse.json({
       success: true,
-      path: 'D:\\Game\\Shopee\\GameUpload (via C2)',
+      path: state.uploadPath || 'D:\\Game\\Shopee\\GameUpload',
       folders: state.folders || [],
       archives: []
     })

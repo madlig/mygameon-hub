@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   HardDrive, FolderOpen, AlertCircle, Loader2, UploadCloud,
   CheckCircle2, ChevronRight, Server, FileArchive, Settings2,
@@ -30,6 +30,9 @@ export default function StudioPage() {
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false)
   const [processState, setProcessState] = useState({ status: 'idle', progress: 0, text: '' })
   const [isElectron, setIsElectron] = useState(true)
+  const prevStatusRef = useRef('idle')
+
+  const isAppElectron = () => typeof window !== 'undefined' && !!window.electronAPI
   
   // Advanced Settings Toggle
   const [showSettings, setShowSettings] = useState(false)
@@ -57,17 +60,21 @@ export default function StudioPage() {
     return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    if (processState.status === 'success' && prevStatusRef.current === 'processing') {
+      fetchScan()
+      fetchHistory()
+    }
+    prevStatusRef.current = processState.status
+  }, [processState.status])
+
   async function checkStatus() {
     try {
-      if (isElectron) {
+      if (isAppElectron()) {
         const res = await fetch('/api/studio/status')
         const state = await res.json()
         if (state && state.status) {
           setProcessState(state)
-          if (state.status === 'success' && processState.status === 'processing') {
-              fetchScan()
-              fetchHistory()
-          }
         }
       } else {
         // C2 Remote Mode
@@ -75,9 +82,6 @@ export default function StudioPage() {
         const json = await res.json()
         if (json.success && json.state && json.state.currentTask) {
           setProcessState(json.state.currentTask)
-          if (json.state.currentTask.status === 'success' && processState.status === 'processing') {
-            fetchHistory()
-          }
         }
       }
     } catch (e) {}
@@ -86,7 +90,7 @@ export default function StudioPage() {
   async function fetchScan() {
     setLoading(true)
     try {
-      if (isElectron) {
+      if (isAppElectron()) {
         const res = await fetch('/api/studio/scan')
         const json = await res.json()
         if (json.success) setData(json)
@@ -129,7 +133,7 @@ export default function StudioPage() {
     if (!selectedFolder || !targetWorkspace) return
     try {
       setProcessState({ status: 'processing', progress: 0, text: 'Mengirim perintah...' })
-      if (isElectron) {
+      if (isAppElectron()) {
         await fetch('/api/studio/process', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
