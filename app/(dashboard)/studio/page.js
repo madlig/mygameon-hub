@@ -18,6 +18,13 @@ function fmtDate(iso) {
     return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
   } catch { return '-' }
 }
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
 export default function StudioPage() {
   const [loading, setLoading] = useState(true)
@@ -129,15 +136,22 @@ export default function StudioPage() {
     } catch (e) {}
   }
 
-  async function startProcessing() {
-    if (!selectedFolder || !targetWorkspace) return
+  const startProcessing = async (action) => {
+    if (!selectedFolder) return
+    if (action === 'upload' && !targetWorkspace) return
+
     try {
       setProcessState({ status: 'processing', progress: 0, text: 'Mengirim perintah...' })
       if (isAppElectron()) {
         await fetch('/api/studio/process', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folderPath: selectedFolder.path, targetEmail: targetWorkspace.email, config: rarConfig })
+          body: JSON.stringify({
+            folderPath: selectedFolder.path,
+            targetEmail: targetWorkspace?.email,
+            config: rarConfig,
+            action
+          })
         })
       } else {
         // C2 Remote Mode
@@ -252,8 +266,15 @@ export default function StudioPage() {
                         : 'bg-transparent text-[var(--text-2)] hover:bg-[var(--elevated)] hover:scale-[1.01]'
                       }`}
                     >
-                      <span className={`font-bold text-[13px] truncate pr-4 transition-colors ${selectedFolder?.name === folder.name ? 'text-[var(--primary)]' : 'group-hover:text-[var(--text)]'}`}>{folder.name}</span>
-                      {selectedFolder?.name === folder.name && <ChevronRight size={16} className="animate-in slide-in-from-left-2" />}
+                      <div className="flex flex-col items-start min-w-0 pr-4">
+                        <span className={`font-bold text-[13px] truncate transition-colors ${selectedFolder?.name === folder.name ? 'text-[var(--primary)]' : 'group-hover:text-[var(--text)]'}`}>{folder.name}</span>
+                        {folder.hasArchive && (
+                          <span className="text-[9px] font-mono font-bold text-green-400 uppercase tracking-widest mt-1">
+                            ✓ Siap Upload ({folder.archiveParts} Part)
+                          </span>
+                        )}
+                      </div>
+                      {selectedFolder?.name === folder.name && <ChevronRight size={16} className="animate-in slide-in-from-left-2 shrink-0" />}
                     </button>
                   ))
                 )}
@@ -274,78 +295,80 @@ export default function StudioPage() {
                     <p className="text-[10px] text-[var(--text-3)] font-mono truncate">{selectedFolder.path}</p>
                   </div>
 
-                  {/* Dropdown Workspace Modern */}
-                  <div className="mb-4 relative">
-                    <label className="block text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)] mb-2">Target Workspace</label>
-                    
-                    <button 
-                      onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
-                      className={`w-full flex items-center justify-between rounded-xl border px-3 py-3 text-sm font-semibold transition-all ${
-                        isWorkspaceDropdownOpen 
-                          ? 'border-[var(--primary)] bg-[var(--primary)]/5 shadow-[0_0_0_2px_rgba(255,209,0,0.1)]' 
-                          : 'border-[var(--border-strong)] bg-[var(--elevated)] hover:bg-[var(--surface)] hover:border-[var(--border-soft)]'
-                      }`}
-                    >
-                      {targetWorkspace ? (
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex shrink-0 items-center justify-center w-8 h-8 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
-                            <Cloud size={16} />
-                          </div>
-                          <div className="flex flex-col items-start min-w-0">
-                            <span className="text-[var(--text)] truncate block w-full">{targetWorkspace.email}</span>
-                            {targetWorkspace.storage && (
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <div className="w-16 h-1.5 rounded-full bg-black/20 overflow-hidden">
-                                  <div className="h-full bg-[var(--primary)]" style={{ width: `${(targetWorkspace.storage.usageGB / targetWorkspace.storage.limitGB) * 100}%` }} />
+                  {/* Dropdown Workspace Modern (Hanya Muncul Jika Sudah Di-Archive) */}
+                  {selectedFolder?.hasArchive && (
+                    <div className="mb-4 relative">
+                      <label className="block text-[10px] font-bold uppercase tracking-widest text-[var(--text-3)] mb-2">Target Workspace</label>
+                      
+                      <button 
+                        onClick={() => setIsWorkspaceDropdownOpen(!isWorkspaceDropdownOpen)}
+                        className={`w-full flex items-center justify-between rounded-xl border px-3 py-3 text-sm font-semibold transition-all ${
+                          isWorkspaceDropdownOpen 
+                            ? 'border-[var(--primary)] bg-[var(--primary)]/5 shadow-[0_0_0_2px_rgba(255,209,0,0.1)]' 
+                            : 'border-[var(--border-strong)] bg-[var(--elevated)] hover:bg-[var(--surface)] hover:border-[var(--border-soft)]'
+                        }`}
+                      >
+                        {targetWorkspace ? (
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex shrink-0 items-center justify-center w-8 h-8 rounded-lg bg-[var(--primary)]/10 text-[var(--primary)]">
+                              <Cloud size={16} />
+                            </div>
+                            <div className="flex flex-col items-start min-w-0">
+                              <span className="text-[var(--text)] truncate block w-full">{targetWorkspace.email}</span>
+                              {targetWorkspace.storage && (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <div className="w-16 h-1.5 rounded-full bg-black/20 overflow-hidden">
+                                    <div className="h-full bg-[var(--primary)]" style={{ width: `${(targetWorkspace.storage.usageGB / targetWorkspace.storage.limitGB) * 100}%` }} />
+                                  </div>
+                                  <span className="text-[9px] font-mono text-[var(--text-4)]">{targetWorkspace.storage.usageGB} / {targetWorkspace.storage.limitGB} GB</span>
                                 </div>
-                                <span className="text-[9px] font-mono text-[var(--text-4)]">{targetWorkspace.storage.usageGB} / {targetWorkspace.storage.limitGB} GB</span>
-                              </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[var(--text-4)]">-- Pilih Akun Google Drive --</span>
+                        )}
+                        <ChevronDown size={16} className={`text-[var(--text-3)] transition-transform duration-300 ${isWorkspaceDropdownOpen ? 'rotate-180 text-[var(--primary)]' : ''}`} />
+                      </button>
+
+                      {/* Dropdown List */}
+                      {isWorkspaceDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setIsWorkspaceDropdownOpen(false)} />
+                          <div className="absolute top-full left-0 right-0 mt-2 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2">
+                            {workspaces.length === 0 ? (
+                              <div className="p-4 text-center text-xs text-[var(--text-4)]">Memuat workspace...</div>
+                            ) : (
+                              workspaces.map(ws => (
+                                <button
+                                  key={ws.email}
+                                  onClick={() => { setTargetWorkspace(ws); setIsWorkspaceDropdownOpen(false) }}
+                                  className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors ${
+                                    targetWorkspace?.email === ws.email ? 'bg-[var(--primary)]/10' : 'hover:bg-[var(--elevated)]'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className={`flex shrink-0 items-center justify-center w-7 h-7 rounded-lg ${
+                                      targetWorkspace?.email === ws.email ? 'bg-[var(--primary)] text-black' : 'bg-[var(--elevated)] text-[var(--text-3)]'
+                                    }`}>
+                                      <Cloud size={14} />
+                                    </div>
+                                    <div className="flex flex-col items-start min-w-0">
+                                      <span className={`text-xs font-bold truncate ${targetWorkspace?.email === ws.email ? 'text-[var(--primary)]' : 'text-[var(--text-2)]'}`}>{ws.email}</span>
+                                      {ws.storage && (
+                                        <span className="text-[9px] text-[var(--text-4)] font-mono">{ws.storage.usageGB}GB used of {ws.storage.limitGB}GB</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {targetWorkspace?.email === ws.email && <CheckCircle2 size={16} className="text-[var(--primary)]" />}
+                                </button>
+                              ))
                             )}
                           </div>
-                        </div>
-                      ) : (
-                        <span className="text-[var(--text-4)]">-- Pilih Akun Google Drive --</span>
+                        </>
                       )}
-                      <ChevronDown size={16} className={`text-[var(--text-3)] transition-transform duration-300 ${isWorkspaceDropdownOpen ? 'rotate-180 text-[var(--primary)]' : ''}`} />
-                    </button>
-
-                    {/* Dropdown List */}
-                    {isWorkspaceDropdownOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setIsWorkspaceDropdownOpen(false)} />
-                        <div className="absolute top-full left-0 right-0 mt-2 z-50 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] p-1 shadow-2xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2">
-                          {workspaces.length === 0 ? (
-                            <div className="p-4 text-center text-xs text-[var(--text-4)]">Memuat workspace...</div>
-                          ) : (
-                            workspaces.map(ws => (
-                              <button
-                                key={ws.email}
-                                onClick={() => { setTargetWorkspace(ws); setIsWorkspaceDropdownOpen(false) }}
-                                className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 transition-colors ${
-                                  targetWorkspace?.email === ws.email ? 'bg-[var(--primary)]/10' : 'hover:bg-[var(--elevated)]'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className={`flex shrink-0 items-center justify-center w-7 h-7 rounded-lg ${
-                                    targetWorkspace?.email === ws.email ? 'bg-[var(--primary)] text-black' : 'bg-[var(--elevated)] text-[var(--text-3)]'
-                                  }`}>
-                                    <Cloud size={14} />
-                                  </div>
-                                  <div className="flex flex-col items-start min-w-0">
-                                    <span className={`text-xs font-bold truncate ${targetWorkspace?.email === ws.email ? 'text-[var(--primary)]' : 'text-[var(--text-2)]'}`}>{ws.email}</span>
-                                    {ws.storage && (
-                                      <span className="text-[9px] text-[var(--text-4)] font-mono">{ws.storage.usageGB}GB used of {ws.storage.limitGB}GB</span>
-                                    )}
-                                  </div>
-                                </div>
-                                {targetWorkspace?.email === ws.email && <CheckCircle2 size={16} className="text-[var(--primary)]" />}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Advanced Settings */}
                   <div className="mb-4">
@@ -376,7 +399,7 @@ export default function StudioPage() {
                             </div>
                         </div>
                         <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--border-soft)]">
-                            <label className="text-[11px] font-semibold text-red-400">Auto-Uninstall / Delete Game Lokal</label>
+                            <label className="text-[11px] font-semibold text-red-400">Auto-Uninstall / Delete Game Lokal (Setelah Upload)</label>
                             <input type="checkbox" checked={rarConfig.autoDelete} onChange={e => setRarConfig({...rarConfig, autoDelete: e.target.checked})} className="accent-red-500" />
                         </div>
                       </div>
@@ -409,25 +432,59 @@ export default function StudioPage() {
                     </div>
                   )}
 
-                  <button 
-                    onClick={startProcessing}
-                    disabled={!targetWorkspace || processState.status === 'processing'}
-                    className={`w-full relative overflow-hidden rounded-2xl py-4 text-sm font-extrabold transition-all duration-300 flex items-center justify-center gap-2 group ${
-                      !targetWorkspace ? 'bg-[var(--elevated)] text-[var(--text-4)] cursor-not-allowed'
-                      : processState.status === 'processing' ? 'bg-gradient-to-r from-[var(--primary)]/40 to-yellow-500/40 text-[var(--text)] cursor-wait shadow-none'
-                      : 'bg-gradient-to-r from-[var(--primary)] to-yellow-400 text-black shadow-[0_4px_20px_rgba(255,209,0,0.4)] hover:shadow-[0_6px_25px_rgba(255,209,0,0.6)] hover:-translate-y-0.5'
-                    }`}
-                  >
-                    {processState.status === 'processing' ? (
-                      <><Loader2 size={18} className="animate-spin" /> MENGIRIM PERINTAH C2...</>
-                    ) : (
+                  {/* Action Buttons */}
+                  <div className="flex flex-col gap-2">
+                    {selectedFolder?.hasArchive ? (
                       <>
-                        <UploadCloud size={18} className="transition-transform group-hover:-translate-y-1" /> 
-                        <span className="tracking-wide uppercase">Eksekusi Remote Upload</span>
-                        <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-20 transition-opacity bg-white mix-blend-overlay" />
+                        <button 
+                          onClick={() => startProcessing('upload')}
+                          disabled={!targetWorkspace || processState.status === 'processing'}
+                          className={`w-full relative overflow-hidden rounded-2xl py-4 text-sm font-extrabold transition-all duration-300 flex items-center justify-center gap-2 group ${
+                            !targetWorkspace ? 'bg-[var(--elevated)] text-[var(--text-4)] cursor-not-allowed'
+                            : processState.status === 'processing' ? 'bg-gradient-to-r from-green-500/40 to-emerald-500/40 text-[var(--text)] cursor-wait shadow-none'
+                            : 'bg-gradient-to-r from-green-500 to-emerald-400 text-white shadow-[0_4px_20px_rgba(34,197,94,0.4)] hover:shadow-[0_6px_25px_rgba(34,197,94,0.6)] hover:-translate-y-0.5'
+                          }`}
+                        >
+                          {processState.status === 'processing' && processState.phase === 'uploading' ? (
+                            <><Loader2 size={18} className="animate-spin" /> MENGUPLOAD...</>
+                          ) : (
+                            <>
+                              <UploadCloud size={18} className="transition-transform group-hover:-translate-y-1" /> 
+                              <span className="tracking-wide uppercase">Eksekusi Upload GDrive</span>
+                              <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-20 transition-opacity bg-white mix-blend-overlay" />
+                            </>
+                          )}
+                        </button>
+                        
+                        <button 
+                          onClick={() => startProcessing('archive')}
+                          disabled={processState.status === 'processing'}
+                          className="w-full text-xs font-bold text-[var(--text-4)] hover:text-[var(--text)] py-2 transition-colors uppercase tracking-widest"
+                        >
+                          Re-Archive Game
+                        </button>
                       </>
+                    ) : (
+                      <button 
+                        onClick={() => startProcessing('archive')}
+                        disabled={processState.status === 'processing'}
+                        className={`w-full relative overflow-hidden rounded-2xl py-4 text-sm font-extrabold transition-all duration-300 flex items-center justify-center gap-2 group ${
+                          processState.status === 'processing' ? 'bg-gradient-to-r from-[var(--primary)]/40 to-yellow-500/40 text-[var(--text)] cursor-wait shadow-none'
+                          : 'bg-gradient-to-r from-[var(--primary)] to-yellow-400 text-black shadow-[0_4px_20px_rgba(255,209,0,0.4)] hover:shadow-[0_6px_25px_rgba(255,209,0,0.6)] hover:-translate-y-0.5'
+                        }`}
+                      >
+                        {processState.status === 'processing' && processState.phase === 'archiving' ? (
+                          <><Loader2 size={18} className="animate-spin" /> MENGARSIPKAN...</>
+                        ) : (
+                          <>
+                            <FileArchive size={18} className="transition-transform group-hover:-translate-y-1" /> 
+                            <span className="tracking-wide uppercase">Mulai Archiving (WinRAR)</span>
+                            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-20 transition-opacity bg-white mix-blend-overlay" />
+                          </>
+                        )}
+                      </button>
                     )}
-                  </button>
+                  </div>
                 </>
               )}
             </div>
@@ -439,48 +496,68 @@ export default function StudioPage() {
             {/* Papan Tulis / Kanban */}
             <div className="flex flex-col rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-sm">
               <div className="border-b border-[var(--border-soft)] bg-[var(--elevated)] px-4 py-3 rounded-t-2xl">
-                <h3 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><CheckSquare size={16} className="text-[var(--accent)]" /> Studio Board</h3>
+                <h3 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><CheckSquare size={16} className="text-[var(--accent)]" /> Target Antrean Upload</h3>
               </div>
               
               <div className="p-4">
                 <form onSubmit={addTask} className="flex gap-2 mb-4">
                   <input 
                     type="text" value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} 
-                    placeholder="Tambah target game baru..."
-                    className="flex-1 rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--primary)] text-[var(--text)]"
+                    placeholder="Ketik judul game target..."
+                    className="flex-1 rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-3 py-2 text-sm outline-none focus:border-[var(--primary)] text-[var(--text)] transition-colors placeholder:text-[var(--text-4)]"
                   />
-                  <button type="submit" disabled={!newTaskTitle.trim() || isUpdatingTask} className="rounded-xl bg-[var(--elevated)] px-3 text-[var(--text-2)] hover:bg-[var(--border-soft)] transition">
+                  <button type="submit" disabled={!newTaskTitle.trim() || isUpdatingTask} className="rounded-xl bg-[var(--primary)] text-black px-3 font-bold hover:brightness-110 disabled:opacity-50 transition-all shadow-[0_2px_10px_rgba(255,209,0,0.2)]">
                     <Plus size={18} />
                   </button>
                 </form>
 
-                <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[280px] overflow-y-auto pr-1">
                   {tasks.length === 0 ? (
-                    <p className="text-center text-xs text-[var(--text-4)] py-4">Papan tulis bersih. Tidak ada antrean tugas.</p>
+                    <div className="flex flex-col items-center justify-center py-8 text-[var(--text-4)]">
+                      <div className="w-12 h-12 rounded-full bg-[var(--elevated)] flex items-center justify-center mb-3">
+                        <CheckSquare size={20} className="opacity-50" />
+                      </div>
+                      <p className="text-xs text-center px-4">Papan bersih. Tambahkan game yang ingin Anda kerjakan selanjutnya.</p>
+                    </div>
                   ) : (
                     tasks.map(task => (
-                      <div key={task._id} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-all ${
-                        task.isUploaded && task.shopeeListed ? 'border-[var(--success)]/20 bg-[var(--success)]/5 opacity-60' : 'border-[var(--border-soft)] bg-[var(--surface)] hover:border-[var(--border-strong)]'
-                      }`}>
-                        <span className={`text-sm font-semibold flex-1 truncate ${task.isUploaded && task.shopeeListed ? 'line-through text-[var(--text-3)]' : 'text-[var(--text)]'}`}>
-                          {task.title}
-                        </span>
-                        
-                        <div className="flex items-center gap-4 shrink-0">
-                          <button onClick={() => toggleTaskStatus(task._id, 'shopeeListed', task.shopeeListed)} className={`flex items-center gap-1 text-[10px] font-bold transition-colors ${task.shopeeListed ? 'text-[var(--accent)]' : 'text-[var(--text-4)] hover:text-[var(--text-2)]'}`}>
-                            {task.shopeeListed ? <Store size={14} /> : <Store size={14} className="opacity-40" />} Shopee
-                          </button>
-                          
-                          <button onClick={() => toggleTaskStatus(task._id, 'isUploaded', task.isUploaded)} className={`flex items-center gap-1 text-[10px] font-bold transition-colors ${task.isUploaded ? 'text-blue-500' : 'text-[var(--text-4)] hover:text-[var(--text-2)]'}`}>
-                            {task.isUploaded ? <Cloud size={14} /> : <Cloud size={14} className="opacity-40" />} GDrive
-                          </button>
-
-                          <div className="w-[1px] h-4 bg-[var(--border-strong)] mx-1" />
-                          
-                          <button onClick={() => deleteTask(task._id)} className="text-[var(--text-4)] hover:text-[var(--danger)] transition">
+                      <div key={task._id} className="group relative flex flex-col gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] p-3 hover:border-[var(--border-strong)] transition-all">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className={`text-sm font-bold flex-1 break-words leading-tight ${task.isUploaded && task.shopeeListed ? 'line-through text-[var(--text-4)]' : 'text-[var(--text)]'}`}>
+                            {task.title}
+                          </span>
+                          <button onClick={() => deleteTask(task._id)} className="text-[var(--text-4)] hover:text-red-400 hover:bg-red-400/10 p-1.5 rounded-lg transition-colors shrink-0">
                             <Trash2 size={14} />
                           </button>
                         </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => toggleTaskStatus(task._id, 'isUploaded', task.isUploaded)} 
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${
+                              task.isUploaded 
+                                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400 shadow-[inset_0_0_10px_rgba(59,130,246,0.1)]' 
+                                : 'bg-[var(--surface)] border-[var(--border-soft)] text-[var(--text-4)] hover:border-[var(--border-strong)] hover:text-[var(--text-3)]'
+                            }`}
+                          >
+                            <Cloud size={12} className={task.isUploaded ? 'fill-blue-500/20' : ''} /> {task.isUploaded ? 'Di-Upload' : 'GDrive'}
+                          </button>
+                          
+                          <button 
+                            onClick={() => toggleTaskStatus(task._id, 'shopeeListed', task.shopeeListed)} 
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border ${
+                              task.shopeeListed 
+                                ? 'bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[inset_0_0_10px_rgba(249,115,22,0.1)]' 
+                                : 'bg-[var(--surface)] border-[var(--border-soft)] text-[var(--text-4)] hover:border-[var(--border-strong)] hover:text-[var(--text-3)]'
+                            }`}
+                          >
+                            <Store size={12} className={task.shopeeListed ? 'fill-orange-500/20' : ''} /> {task.shopeeListed ? 'Di-Listing' : 'Shopee'}
+                          </button>
+                        </div>
+                        
+                        {task.isUploaded && task.shopeeListed && (
+                          <div className="absolute inset-0 bg-[var(--surface)]/40 rounded-xl pointer-events-none mix-blend-overlay" />
+                        )}
                       </div>
                     ))
                   )}
@@ -492,22 +569,28 @@ export default function StudioPage() {
             <div className="flex flex-col rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-sm">
               <div className="border-b border-[var(--border-soft)] bg-[var(--elevated)] px-4 py-3 rounded-t-2xl flex justify-between items-center">
                 <h3 className="font-bold text-sm text-[var(--text)] flex items-center gap-2"><Clock size={16} className="text-blue-400" /> Riwayat Upload</h3>
-                <span className="text-[10px] text-[var(--text-3)] font-medium">Dari Katalog</span>
               </div>
               
               <div className="p-2 h-[220px] overflow-y-auto">
                 {history.length === 0 ? (
-                  <p className="text-center text-xs text-[var(--text-4)] py-8">Belum ada riwayat upload.</p>
+                  <div className="flex flex-col items-center justify-center h-full text-[var(--text-4)]">
+                    <Clock size={24} className="mb-2 opacity-50" />
+                    <p className="text-xs">Belum ada riwayat upload.</p>
+                  </div>
                 ) : (
                   history.map(item => (
                     <div key={item._id} className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--border-soft)] last:border-0 hover:bg-[var(--elevated)] transition rounded-lg">
                       <div className="min-w-0 flex-1 pr-4">
-                        <p className="text-sm font-bold text-[var(--text)] truncate">{item.name}</p>
-                        <p className="text-[10px] text-[var(--text-3)] font-mono truncate mt-0.5">{item.ownerEmail}</p>
+                        <p className="text-sm font-bold text-[var(--text)] truncate">{item.gameName}</p>
+                        <p className="text-[10px] text-[var(--text-3)] font-mono truncate mt-0.5">{item.workspaceEmail}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs font-semibold text-[var(--text-2)]">{item.lastSyncedAt ? fmtDate(item.lastSyncedAt) : '-'}</p>
-                        <p className="text-[10px] text-[var(--text-4)] mt-0.5">{item.lastSyncedAt ? fmtTime(item.lastSyncedAt) : '-'}</p>
+                        <p className="text-xs font-semibold text-[var(--primary)]">{item.totalSize ? formatBytes(item.totalSize) : '-'}</p>
+                        <div className="flex items-center justify-end gap-1.5 text-[10px] text-[var(--text-4)] mt-0.5">
+                          <span>{item.uploadedAt ? fmtDate(item.uploadedAt) : '-'}</span>
+                          <span>&bull;</span>
+                          <span>{item.uploadedAt ? fmtTime(item.uploadedAt) : '-'}</span>
+                        </div>
                       </div>
                     </div>
                   ))

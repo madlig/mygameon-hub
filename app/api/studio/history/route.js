@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import connectToDatabase from '@/lib/db'
-import GameCatalog from '@/models/GameCatalog'
+import UploadHistory from '@/models/UploadHistory'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,9 +8,9 @@ export async function GET() {
   try {
     await connectToDatabase()
     
-    // Ambil 15 riwayat upload terbaru yang lastSyncedAt nya tidak null
-    const history = await GameCatalog.find({ lastSyncedAt: { $exists: true, $ne: null } })
-      .sort({ lastSyncedAt: -1 })
+    // Ambil 15 riwayat upload terbaru dari UploadHistory
+    const history = await UploadHistory.find({})
+      .sort({ uploadedAt: -1 })
       .limit(15)
       .lean()
 

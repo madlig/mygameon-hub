@@ -37,9 +37,12 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { folderPath, targetEmail, config } = await request.json()
-    if (!folderPath || !targetEmail) {
-      return NextResponse.json({ error: 'Data tidak lengkap' }, { status: 400 })
+    const { folderPath, targetEmail, config, action } = await request.json()
+    if (!folderPath) {
+      return NextResponse.json({ error: 'Folder Path tidak lengkap' }, { status: 400 })
+    }
+    if (action === 'upload' && !targetEmail) {
+      return NextResponse.json({ error: 'Target Email tidak lengkap untuk upload' }, { status: 400 })
     }
 
     await connectDB()
@@ -47,18 +50,19 @@ export async function POST(request) {
     // Cek apakah ada proses yang masih berjalan di PC
     const state = await DesktopState.findOne({ machineId: 'mygameon-pc-1' })
     if (state?.currentTask?.status === 'processing') {
-      return NextResponse.json({ error: 'Ada proses kompresi/upload yang masih berjalan di PC Zombi!' }, { status: 429 })
+      return NextResponse.json({ error: 'Ada proses yang masih berjalan di PC Zombi!' }, { status: 429 })
     }
 
     // Eksekusi di background via C2
+    const cmdType = action === 'archive' ? 'START_ARCHIVE' : 'START_UPLOAD'
     await RemoteCommand.create({
       machineId: 'mygameon-pc-1',
-      type: 'START_UPLOAD',
+      type: cmdType,
       status: 'pending',
       payload: { workspace: targetEmail, targetFolder: folderPath, rarConfig: config }
     })
 
-    return NextResponse.json({ success: true, message: 'Command terkirim ke Zombi PC' })
+    return NextResponse.json({ success: true, message: `Command ${cmdType} terkirim ke Zombi PC` })
 
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })
