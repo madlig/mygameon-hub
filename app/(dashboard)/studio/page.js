@@ -81,14 +81,20 @@ export default function StudioPage() {
         const res = await fetch('/api/studio/status')
         const state = await res.json()
         if (state && state.status) {
-          setProcessState(state)
+          setProcessState(prev => {
+            if (prev.status === 'processing' && state.status === 'idle') return prev
+            return state
+          })
         }
       } else {
         // C2 Remote Mode
         const res = await fetch('/api/c2/state')
         const json = await res.json()
         if (json.success && json.state && json.state.currentTask) {
-          setProcessState(json.state.currentTask)
+          setProcessState(prev => {
+            if (prev.status === 'processing' && json.state.currentTask.status === 'idle') return prev
+            return json.state.currentTask
+          })
         }
       }
     } catch (e) {}
