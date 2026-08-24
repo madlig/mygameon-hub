@@ -148,8 +148,9 @@ export default function StudioPage() {
 
     try {
       setProcessState({ status: 'processing', progress: 0, text: 'Mengirim perintah...' })
+      let res
       if (isAppElectron()) {
-        await fetch('/api/studio/process', {
+        res = await fetch('/api/studio/process', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -161,7 +162,7 @@ export default function StudioPage() {
         })
       } else {
         // C2 Remote Mode
-        await fetch('/api/c2/command', {
+        res = await fetch('/api/c2/command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -170,7 +171,15 @@ export default function StudioPage() {
           })
         })
       }
-    } catch (e) {}
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `HTTP Error: ${res.status}`)
+      }
+    } catch (e) {
+      console.error('Failed to start processing:', e)
+      setProcessState({ status: 'error', progress: 0, text: 'Gagal mengirim perintah: ' + e.message })
+    }
   }
 
   // --- Task Board Actions ---
