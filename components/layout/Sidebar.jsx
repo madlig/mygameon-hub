@@ -67,9 +67,10 @@ export default function Sidebar() {
         setUpdateReady(true)
         setUpdateStatus('ready')
       })
-      window.electronAPI.onUpdateError(() => {
+      window.electronAPI.onUpdateError((err) => {
+        console.error('Update Error:', err)
         setUpdateStatus('error')
-        setTimeout(() => setUpdateStatus(null), 3000)
+        setTimeout(() => setUpdateStatus(null), 5000)
       })
     }
   }, [updateStatus])
@@ -227,6 +228,13 @@ export default function Sidebar() {
                   Unduh {updateProgress}%
                 </span>
               </div>
+            ) : updateStatus === 'error' ? (
+              <button
+                onClick={checkForUpdates}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] font-semibold text-red-400 transition-colors hover:bg-red-500/20"
+              >
+                <AlertCircle size={14} /> Gagal Cek Update
+              </button>
             ) : (
               <button
                 onClick={checkForUpdates}

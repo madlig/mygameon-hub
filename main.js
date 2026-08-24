@@ -202,6 +202,11 @@ function createWindow() {
       }
       parsedEnv = parseEnvFile(envSource);
     }
+    
+    // Auto-Updater requires GH_TOKEN to access private GitHub Releases
+    if (parsedEnv.GH_TOKEN || process.env.GH_TOKEN) {
+      process.env.GH_TOKEN = parsedEnv.GH_TOKEN || process.env.GH_TOKEN;
+    }
 
     // Validate required env keys
     const requiredKeys = ['MONGODB_URI', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ADMIN_EMAIL'];
