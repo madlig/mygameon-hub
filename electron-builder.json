@@ -16,6 +16,12 @@
     "models/**/*",
     "scripts/**/*"
   ],
+  "extraResources": [
+    {
+      "from": ".env.local",
+      "to": ".env.local"
+    }
+  ],
   "extraMetadata": {
     "main": "main.js"
   },

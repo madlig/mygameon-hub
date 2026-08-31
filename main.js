@@ -98,6 +98,53 @@ function parseEnvFile(filePath) {
   return parsedEnv;
 }
 
+function resolveEnvConfig() {
+  const possiblePaths = [
+    // 1. Persistent UserData directory in AppData (Survives all updates and reinstalls)
+    path.join(app.getPath('userData'), '.env.local'),
+    // 2. ExtraResources in app resources directory
+    path.join(process.resourcesPath, '.env.local'),
+    // 3. Next to application executable
+    path.join(path.dirname(app.getPath('exe')), '.env.local'),
+    // 4. In app path / asar root
+    path.join(app.getAppPath(), '.env.local'),
+    // 5. In current working directory
+    path.join(process.cwd(), '.env.local'),
+  ];
+
+  let parsedEnv = {};
+  let sourceFound = null;
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const parsed = parseEnvFile(p);
+        if (parsed.MONGODB_URI || parsed.GOOGLE_CLIENT_ID || parsed.ADMIN_EMAIL || parsed.AUTH_SECRET) {
+          parsedEnv = parsed;
+          sourceFound = p;
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  // If found in a temporary or bundled location, persist a copy to userData so future updates always have it!
+  const userDataEnv = path.join(app.getPath('userData'), '.env.local');
+  if (sourceFound && sourceFound !== userDataEnv) {
+    try {
+      if (!fs.existsSync(app.getPath('userData'))) {
+        fs.mkdirSync(app.getPath('userData'), { recursive: true });
+      }
+      fs.copyFileSync(sourceFound, userDataEnv);
+      console.log(`[main] Cached .env.local to persistent userData: ${userDataEnv}`);
+    } catch (e) {
+      console.error('[main] Failed to cache .env.local to userData:', e);
+    }
+  }
+
+  return { parsedEnv, sourceFound };
+}
+
 function setupAutoUpdater() {
   if (!app.isPackaged) return;
 
@@ -190,17 +237,15 @@ function createWindow() {
     const standaloneDir = path.join(app.getAppPath(), '.next', 'standalone');
     const serverPath = path.join(standaloneDir, 'server.js');
 
-    const envSource = path.join(app.getAppPath(), '.env.local');
-    const envDest = path.join(standaloneDir, '.env.local');
+    const { parsedEnv, sourceFound } = resolveEnvConfig();
 
-    let parsedEnv = {};
-    if (fs.existsSync(envSource)) {
+    if (sourceFound) {
+      const envDest = path.join(standaloneDir, '.env.local');
       try {
-        fs.copyFileSync(envSource, envDest);
+        fs.copyFileSync(sourceFound, envDest);
       } catch (e) {
-        console.error('Failed to copy .env.local:', e);
+        console.error('Failed to copy .env.local to standalone directory:', e);
       }
-      parsedEnv = parseEnvFile(envSource);
     }
     
     // Auto-Updater requires GH_TOKEN to access private GitHub Releases
