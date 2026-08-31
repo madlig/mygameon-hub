@@ -1,8 +1,14 @@
 import { getClientForEmail } from '@/lib/googleClient'
 import connectToDatabase from '@/lib/db'
 import GameCatalog from '@/models/GameCatalog'
+import { auth } from '@/app/api/auth/[...nextauth]/route'
 
 export async function POST(request) {
+  const session = await auth()
+  if (!session?.user?.email) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
+  }
+
   let sourceFolderId, targetEmail, sourceOwnerEmail, gameName
 
   try {
@@ -57,6 +63,7 @@ export async function POST(request) {
         }
 
         const folderRes = await targetDrive.files.create({
+          supportsAllDrives: true,
           requestBody: {
             name: gameName,
             mimeType: 'application/vnd.google-apps.folder',
@@ -66,15 +73,17 @@ export async function POST(request) {
         })
         const newFolderId = folderRes.data.id
 
-        // 3. Ambil daftar file di sourceFolder
+        // 3. Ambil daftar file di sourceFolder (exclude subfolder to prevent copy crash)
         sendProgress({ status: 'info', text: 'Membaca part file dari sumber...' })
         let pageToken
         const files = []
         do {
           const res = await sourceDrive.files.list({
-            q: `'${sourceFolderId}' in parents and trashed = false`,
+            q: `'${sourceFolderId}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
             pageSize: 100,
             pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
             fields: 'nextPageToken, files(id, name, size)'
           })
           files.push(...(res.data.files || []))
@@ -82,7 +91,7 @@ export async function POST(request) {
         } while (pageToken)
 
         if (files.length === 0) {
-            throw new Error('Folder sumber kosong')
+            throw new Error('Folder sumber kosong atau tidak berisi file arsip')
         }
 
         sendProgress({ status: 'info', text: `Menemukan ${files.length} part. Mulai menyalin...` })
@@ -98,6 +107,7 @@ export async function POST(request) {
           await Promise.all(batch.map(async (file) => {
             await targetDrive.files.copy({
               fileId: file.id,
+              supportsAllDrives: true,
               requestBody: {
                 name: file.name,
                 parents: [newFolderId]

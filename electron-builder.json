@@ -1,7 +1,7 @@
 {
   "appId": "com.mygameon.studio",
   "productName": "MyGameON Studio",
-  "asar": false,
+  "asar": true,
   "directories": {
     "output": "dist",
     "buildResources": "build"
@@ -12,7 +12,6 @@
     "package.json",
     ".next/standalone/**/*",
     "public/**/*",
-    ".env.local",
     "lib/**/*",
     "models/**/*",
     "scripts/**/*"

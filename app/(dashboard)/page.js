@@ -16,8 +16,8 @@ const allApps = [
   { icon: Sparkles, label: 'Sims 4', desc: 'Order Game', href: '/sims4/order', accent: '#c084fc' },
   { icon: Users, label: 'CRM', desc: 'Data Pelanggan', href: '/revoke', accent: '#60a5fa' },
   { icon: Clock, label: 'Log', desc: 'Riwayat Kirim', href: '/log', accent: '#9ca3af' },
-  { icon: Folder, label: 'Drive', desc: 'Status Kapasitas', href: '/drive-status', accent: '#3b82f6' },
-  { icon: ShieldAlert, label: 'Cek File', desc: 'Folder Game', href: '/check', accent: '#38bdf8' },
+  { icon: Folder, label: 'Files', desc: 'File Manager', href: '/files', accent: '#38bdf8' },
+  { icon: ShieldAlert, label: 'Studio', desc: 'Upload & Archive', href: '/studio', accent: '#fb923c' },
   { icon: Terminal, label: 'Lisensi', desc: 'DB Hardware', href: '/sims4/licenses', accent: '#a78bfa' },
   { icon: KeyRound, label: 'Akun', desc: 'Whitelist Email', href: '/accounts', accent: '#f59e0b' },
 ]

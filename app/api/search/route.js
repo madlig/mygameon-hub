@@ -38,8 +38,8 @@ export async function GET(request) {
       { $group: {
           _id: { $toLower: "$name" },
           name: { $first: "$name" },
-          size: { $first: "$size" },
-          totalFiles: { $first: "$totalFiles" },
+          totalSize: { $first: "$totalSize" },
+          fileCount: { $first: "$fileCount" },
           sources: { $push: { folderId: "$folderId", ownerEmail: "$ownerEmail", sendCount: { $ifNull: ["$sendCount", 0] } } }
         }
       },
@@ -53,11 +53,13 @@ export async function GET(request) {
     const results = groupedGames.map(g => {
       // Sort sources by sendCount
       g.sources.sort((a, b) => a.sendCount - b.sendCount)
+      const primaryFolderId = g.sources[0]?.folderId || ''
       return {
-        id: g.name,
+        id: primaryFolderId || g.name,
+        targetId: primaryFolderId,
         name: g.name,
-        size: fmtSize(g.size),
-        totalFiles: g.totalFiles,
+        size: fmtSize(g.totalSize),
+        totalFiles: g.fileCount || 0,
         mimeType: 'application/vnd.google-apps.folder',
         isShortcut: false,
         sources: g.sources,

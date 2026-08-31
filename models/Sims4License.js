@@ -5,7 +5,7 @@ const Sims4LicenseSchema = new mongoose.Schema({
   hwid: { type: String, default: '' },
   cc: { type: String, enum: ['Y', 'N'], default: 'N' },
   status: { type: String, enum: ['Active', 'Banned'], default: 'Active' },
-  email: { type: String, default: '' },
+  email: { type: String, default: '', lowercase: true, trim: true },
   createdAt: { type: Date, default: Date.now }
 });
 

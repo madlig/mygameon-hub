@@ -20,9 +20,16 @@
 # production
 # /build (dihapus agar folder build berisi ikon/installer masuk ke git)
 
-# misc
+# misc & security
 .DS_Store
 *.pem
+*.key
+*.crt
+*.pfx
+*serviceAccount*.json
+*credentials*.json
+*secret*.json
+*.log
 
 # debug
 npm-debug.log*
@@ -30,8 +37,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
+.env
 .env*
+.env*.local
 
 # vercel
 .vercel
@@ -40,4 +49,4 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 dist/  
-.claude/  
+.claude/

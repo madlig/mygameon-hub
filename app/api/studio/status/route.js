@@ -1,7 +1,25 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@/app/api/auth/[...nextauth]/route'
+import fs from 'fs'
+import path from 'path'
 import connectDB from '@/lib/db'
 import mongoose from 'mongoose'
+
+const STATE_FILE = path.join(process.cwd(), 'studio-state.json')
+
+function getLocalJobState() {
+  if (fs.existsSync(STATE_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'))
+    } catch (_) {}
+  }
+  return { status: 'idle', progress: 0, text: '', logs: [] }
+}
+
+function setLocalJobState(state) {
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+  } catch (_) {}
+}
 
 const desktopStateSchema = new mongoose.Schema({
   machineId: String,
@@ -25,23 +43,40 @@ try {
 
 export async function GET() {
   try {
-    const session = await auth()
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 1. Prioritaskan status lokal dari studio-state.json (Electron Desktop Mode)
+    const localState = getLocalJobState()
+    if (localState && (localState.status === 'processing' || (localState.logs && localState.logs.length > 0))) {
+      return NextResponse.json(localState)
     }
 
+    // 2. Fallback ke DesktopState MongoDB (Remote C2 Mode)
     await connectDB()
     const state = await DesktopState.findOne({ machineId: 'mygameon-pc-1' })
     
-    if (!state || !state.currentTask) {
-      return NextResponse.json({ status: 'idle', progress: 0, text: '' })
+    if (state && state.currentTask && state.currentTask.status === 'processing') {
+      return NextResponse.json({
+        status: state.currentTask.status,
+        progress: state.currentTask.progress || 0,
+        text: state.currentTask.text || ''
+      })
     }
 
-    return NextResponse.json({
-      status: state.currentTask.status || 'idle',
-      progress: state.currentTask.progress || 0,
-      text: state.currentTask.text || ''
-    })
+    // 3. Status Netral (Idle) jika tidak ada task yang sedang berjalan
+    return NextResponse.json({ status: 'idle', progress: 0, text: '', logs: [] })
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+export async function DELETE() {
+  try {
+    setLocalJobState({ status: 'idle', progress: 0, text: '', logs: [] })
+    await connectDB()
+    await DesktopState.updateOne(
+      { machineId: 'mygameon-pc-1' },
+      { $set: { 'currentTask.status': 'idle', 'currentTask.progress': 0, 'currentTask.text': '' } }
+    )
+    return NextResponse.json({ success: true })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

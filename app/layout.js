@@ -7,17 +7,23 @@ const jakarta = Plus_Jakarta_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+  preload: true,
 })
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["600", "700", "800"],
+  display: "swap",
+  preload: true,
 })
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+  preload: true,
 })
 
 export const metadata = {
@@ -34,17 +40,15 @@ export const viewport = {
   themeColor: '#0a0b0f',
   width: 'device-width',
   initialScale: 1,
-  // Layar statis di mobile: tanpa zoom aksidental saat fokus input.
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  // Keyboard mendorong konten, bukan menutupi bar bawah.
   interactiveWidget: 'resizes-content',
 }
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id" className="dark">
+    <html lang="id" className={`dark ${jakarta.variable} ${bricolage.variable} ${geistMono.variable}`}>
       <head>
         <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
@@ -56,7 +60,7 @@ export default function RootLayout({ children }) {
       <body
         data-density="comfortable"
         data-sb="expanded"
-        className={`${jakarta.variable} ${bricolage.variable} ${geistMono.variable} min-h-full flex flex-col`}
+        className="min-h-full flex flex-col font-sans antialiased text-[var(--text)] selection:bg-[var(--primary)] selection:text-black"
       >
         <SessionWrapper>
           <ServiceWorkerRegister />

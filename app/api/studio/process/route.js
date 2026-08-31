@@ -37,7 +37,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { folderPath, targetEmail, config, action } = await request.json()
+    const { folderPath, targetEmail, config, action, mode, targetFolderId, autoPropagate, gameName } = await request.json()
     if (!folderPath) {
       return NextResponse.json({ error: 'Folder Path tidak lengkap' }, { status: 400 })
     }
@@ -59,7 +59,17 @@ export async function POST(request) {
       machineId: 'mygameon-pc-1',
       type: cmdType,
       status: 'pending',
-      payload: { workspace: targetEmail, targetFolder: folderPath, rarConfig: config }
+      payload: {
+        workspace: targetEmail,
+        targetFolder: folderPath,
+        rarConfig: config,
+        options: {
+          mode: mode || 'new', // 'new' | 'update'
+          targetFolderId: targetFolderId || null,
+          autoPropagate: !!autoPropagate,
+          gameName: gameName || null
+        }
+      }
     })
 
     return NextResponse.json({ success: true, message: `Command ${cmdType} terkirim ke Zombi PC` })

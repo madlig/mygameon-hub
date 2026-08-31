@@ -69,10 +69,19 @@ export async function POST(request) {
         // Jika semua workspace gagal, atau tidak ada di katalog, fallback ke id bawaan (menggunakan token admin)
         if (!driveForShare) {
           console.warn(`Semua workspace gagal untuk ${item.name}, menggunakan fallback admin.`)
-          realId = item.targetId || item.id
+          realId = (item.targetId && item.targetId !== item.name) ? item.targetId : (item.id && item.id !== item.name ? item.id : null)
           ownerEmail = item.ownerEmail || 'Unknown'
           
-          if (!realId) throw new Error('Game tidak ditemukan di katalog dan tidak ada fallback ID')
+          if (!realId) {
+            // Coba cari sekali lagi dari database berdasarkan case-insensitive name
+            const foundCatalog = await GameCatalog.findOne({ name: { $regex: '^' + item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } }).lean()
+            if (foundCatalog?.folderId) {
+              realId = foundCatalog.folderId
+              ownerEmail = foundCatalog.ownerEmail
+            }
+          }
+
+          if (!realId) throw new Error(`Game '${item.name}' tidak ditemukan di katalog dan tidak memiliki Folder ID yang valid`)
 
           try {
             const permRes = await adminDrive.permissions.create({
@@ -182,12 +191,37 @@ export async function POST(request) {
                 bonusClaimed: 0
             })
         } else {
-            // If it's a bonus, fulfill an existing order's pending bonus
-            const pendingOrder = await Order.findOne({ email: email.toLowerCase(), $expr: { $lt: ["$bonusClaimed", "$bonusEligible"] } }).sort({ orderDate: 1 })
-            if (pendingOrder) {
-                pendingOrder.bonusClaimed += successItems.length
-                pendingOrder.cartItems.push(...successItems.map(i => ({ name: i.name, targetId: i.realId, isBonus: true })))
-                await pendingOrder.save()
+            // If it's a bonus, fulfill existing pending bonus claims iteratively
+            let remainingClaims = successItems.length
+            const pendingOrders = await Order.find({ 
+                email: email.toLowerCase(), 
+                $expr: { $lt: ["$bonusClaimed", "$bonusEligible"] } 
+            }).sort({ orderDate: 1 })
+
+            let itemIndex = 0
+            for (const pOrder of pendingOrders) {
+                if (remainingClaims <= 0) break
+                const availableInOrder = (pOrder.bonusEligible || 0) - (pOrder.bonusClaimed || 0)
+                const toClaim = Math.min(availableInOrder, remainingClaims)
+                
+                const itemsForThisOrder = successItems.slice(itemIndex, itemIndex + toClaim)
+                pOrder.bonusClaimed += toClaim
+                pOrder.cartItems.push(...itemsForThisOrder.map(i => ({ name: i.name, targetId: i.realId, isBonus: true })))
+                await pOrder.save()
+                
+                remainingClaims -= toClaim
+                itemIndex += toClaim
+            }
+
+            // Jika masih ada sisa klaim (misal pelanggan tanpa order sebelumnya), catat order baru
+            if (remainingClaims > 0) {
+                const leftoverItems = successItems.slice(itemIndex)
+                await Order.create({
+                    email: email.toLowerCase(),
+                    cartItems: leftoverItems.map(i => ({ name: i.name, targetId: i.realId, isBonus: true })),
+                    bonusEligible: 0,
+                    bonusClaimed: leftoverItems.length
+                })
             }
         }
       } catch (e) {

@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server'
 import connectToDatabase from '@/lib/db'
 import AccessLog from '@/models/AccessLog'
 import Sims4License from '@/models/Sims4License'
+import { auth } from '@/app/api/auth/[...nextauth]/route'
 
 export async function GET() {
   try {
+    const session = await auth()
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     await connectToDatabase()
 
     // 1. Bersihkan Data General Game (AccessLog)

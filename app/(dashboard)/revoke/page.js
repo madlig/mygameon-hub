@@ -325,12 +325,17 @@ export default function CustomerCRMPage() {
                 {simsLicenses.map(sims => (
                   <div key={sims._id} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-4">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="text-sm font-bold text-[var(--text)]">{sims.invoiceNumber}</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sims.hwidLocked ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--warning)]/10 text-[var(--warning)]'}`}>
-                        {sims.hwidLocked ? 'HWID Terkunci' : 'HWID Kosong'}
+                      <span className="text-sm font-bold text-[var(--text)]">{sims.invoice}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${sims.hwid ? 'bg-[var(--success)]/10 text-[var(--success)]' : 'bg-[var(--warning)]/10 text-[var(--warning)]'}`}>
+                        {sims.hwid ? 'HWID Terkunci' : 'HWID Kosong'}
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--text-2)]">Masa aktif: {sims.isPermanent ? 'Permanen' : (sims.expirationDate ? fmtDate(sims.expirationDate) : '-')}</p>
+                    <div className="flex items-center justify-between text-xs text-[var(--text-2)]">
+                      <span className="rounded bg-[var(--elevated)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-3)]">
+                        {sims.cc === 'Y' ? 'Premium CC' : 'Standard'}
+                      </span>
+                      <span>Dibuat: {fmtDate(sims.createdAt) || '-'}</span>
+                    </div>
                   </div>
                 ))}
               </div>

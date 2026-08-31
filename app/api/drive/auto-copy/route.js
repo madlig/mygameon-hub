@@ -2,20 +2,29 @@ import { NextResponse } from 'next/server';
 import { getClientForEmail } from '@/lib/googleClient';
 import { auth } from '@/app/api/auth/[...nextauth]/route';
 
-// Helper for recursive copy (if needed) or just copying children
+// Helper for recursive copy with pagination and shared drive support
 async function copyFolderContents(sourceDrive, targetDrive, sourceFolderId, targetFolderId) {
-  // Get all files in source folder
-  const res = await sourceDrive.files.list({
-    q: `'${sourceFolderId}' in parents and trashed = false`,
-    fields: 'files(id, name, mimeType)',
-  });
+  let pageToken;
+  const files = [];
 
-  const files = res.data.files || [];
+  do {
+    const res = await sourceDrive.files.list({
+      q: `'${sourceFolderId}' in parents and trashed = false`,
+      pageSize: 100,
+      pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      fields: 'nextPageToken, files(id, name, mimeType)',
+    });
+    files.push(...(res.data.files || []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
   
   for (const file of files) {
     if (file.mimeType === 'application/vnd.google-apps.folder') {
       // Create subfolder in target
       const folderRes = await targetDrive.files.create({
+        supportsAllDrives: true,
         requestBody: {
           name: file.name,
           mimeType: 'application/vnd.google-apps.folder',
@@ -29,9 +38,10 @@ async function copyFolderContents(sourceDrive, targetDrive, sourceFolderId, targ
       // Copy file
       await targetDrive.files.copy({
         fileId: file.id,
+        supportsAllDrives: true,
         requestBody: {
           parents: [targetFolderId],
-          name: file.name // keep the same name
+          name: file.name
         }
       });
     }

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import { google } from 'googleapis'
+import connectToDatabase from '@/lib/db'
+import AccessLog from '@/models/AccessLog'
+import GameCatalog from '@/models/GameCatalog'
+import { getClientForEmail } from '@/lib/googleClient'
 
 // Vercel Cron memanggil endpoint ini — tidak pakai session user
 async function getAdminClients() {
@@ -17,74 +21,122 @@ async function getAdminClients() {
 }
 
 export async function GET(request) {
-  const secret = request.headers.get('authorization')
-  if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-  // Verifikasi request dari Vercel Cron
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    const { drive, gmail, sheets } = await getAdminClients()
+    await connectToDatabase()
+    const { drive: adminDrive, gmail, sheets } = await getAdminClients()
     const sheetId = process.env.GSHEET_ID
     const now = new Date()
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
 
-    // Baca semua baris ExpiringAccess
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: 'ExpiringAccess!A:F',
-    })
+    // 1. Sinkronkan dari MongoDB AccessLog (Status Active yang sudah Expired)
+    const expiredLogs = await AccessLog.find({
+      status: 'active',
+      expiresAt: { $lte: now, $ne: null }
+    }).lean()
 
-    const rows = res.data.values || []
     const revokedCount = []
     const notifiedCount = []
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i]
-      const [email, fileId, permissionId, gameName, expiredAt, status] = row
-
-      // Skip header atau baris yang sudah direvoke
-      if (!email || email === 'email' || status === 'revoked') continue
-
-      const expDate = new Date(expiredAt)
-
-      // 1. Kirim notifikasi H-1
-      const diffDays = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24))
-      if (diffDays === 1 && status === 'active') {
-        try {
-          await sendExpiryNotification(gmail, email, gameName, expDate)
-          notifiedCount.push(gameName)
-        } catch (e) {
-          console.error('Notify error:', e.message)
+    for (const log of expiredLogs) {
+      try {
+        let drive = adminDrive
+        if (log.ownerEmail && log.ownerEmail !== process.env.ADMIN_EMAIL) {
+          try {
+            drive = await getClientForEmail(log.ownerEmail)
+          } catch (_) {
+            drive = adminDrive
+          }
         }
-      }
 
-      // 2. Revoke jika sudah expired
-      if (expDate <= now && status === 'active') {
-        try {
+        if (log.permissionId && log.fileId) {
           await drive.permissions.delete({
-            fileId,
-            permissionId,
+            fileId: log.fileId,
+            permissionId: log.permissionId,
             supportsAllDrives: true,
           })
-
-          // Update status di Sheets jadi 'revoked'
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: sheetId,
-            range: `ExpiringAccess!F${i + 1}`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [['revoked']] },
-          })
-
-          revokedCount.push(gameName)
-        } catch (e) {
-          console.error('Revoke error:', e.message)
         }
+
+        await AccessLog.findByIdAndUpdate(log._id, { status: 'revoked' })
+        revokedCount.push(log.gameName || log.fileName || log.fileId)
+      } catch (err) {
+        if (err.code === 404 || (err.message && err.message.toLowerCase().includes('not found'))) {
+          await AccessLog.findByIdAndUpdate(log._id, { status: 'revoked' })
+        } else {
+          console.error(`Gagal revoke AccessLog ${log._id}:`, err.message)
+        }
+      }
+    }
+
+    // 2. Baca Google Sheet ExpiringAccess jika tersedia
+    if (sheetId && sheets) {
+      try {
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId: sheetId,
+          range: 'ExpiringAccess!A:F',
+        })
+
+        const rows = res.data.values || []
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]
+          const [email, fileId, permissionId, gameName, expiredAt, status] = row
+
+          if (!email || email === 'email' || status === 'revoked') continue
+
+          const expDate = new Date(expiredAt)
+
+          // Kirim notifikasi H-1
+          const diffDays = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24))
+          if (diffDays === 1 && status === 'active' && gmail) {
+            try {
+              await sendExpiryNotification(gmail, email, gameName, expDate)
+              notifiedCount.push(gameName)
+            } catch (e) {
+              console.error('Notify error:', e.message)
+            }
+          }
+
+          // Revoke jika sudah expired di Sheets
+          if (expDate <= now && status === 'active') {
+            try {
+              let drive = adminDrive
+              const cat = await GameCatalog.findOne({ folderId: fileId }).lean()
+              if (cat?.ownerEmail && cat.ownerEmail !== process.env.ADMIN_EMAIL) {
+                try {
+                  drive = await getClientForEmail(cat.ownerEmail)
+                } catch (_) {}
+              }
+
+              await drive.permissions.delete({
+                fileId,
+                permissionId,
+                supportsAllDrives: true,
+              })
+
+              await sheets.spreadsheets.values.update({
+                spreadsheetId: sheetId,
+                range: `ExpiringAccess!F${i + 1}`,
+                valueInputOption: 'USER_ENTERED',
+                requestBody: { values: [['revoked']] },
+              })
+            } catch (e) {
+              if (e.code === 404 || (e.message && e.message.toLowerCase().includes('not found'))) {
+                await sheets.spreadsheets.values.update({
+                  spreadsheetId: sheetId,
+                  range: `ExpiringAccess!F${i + 1}`,
+                  valueInputOption: 'USER_ENTERED',
+                  requestBody: { values: [['revoked']] },
+                })
+              }
+            }
+          }
+        }
+      } catch (sheetErr) {
+        console.warn('ExpiringAccess sheet sync warning:', sheetErr.message)
       }
     }
 

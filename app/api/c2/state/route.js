@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import connectToDatabase from '@/lib/db'
 import DesktopState from '@/models/DesktopState'
+import { auth } from '@/app/api/auth/[...nextauth]/route'
 
 // Middleware to check C2 Secret
 function checkAuth(req) {
@@ -11,8 +12,18 @@ function checkAuth(req) {
   return true
 }
 
-// GET /api/c2/state - For Mobile App to read state (Protected by NextAuth in real app, but for now we'll just return it)
+async function verifyCaller(req) {
+  if (checkAuth(req)) return true
+  const session = await auth()
+  return !!session?.user?.email
+}
+
+// GET /api/c2/state - For Dashboard / Mobile to read state (Protected by NextAuth or C2 Secret)
 export async function GET(req) {
+  if (!(await verifyCaller(req))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     await connectToDatabase()
     const url = new URL(req.url)

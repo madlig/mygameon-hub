@@ -15,7 +15,7 @@ export default function TopBar({ title, backHref }) {
     let category = 'Lainnya'
     if (['/', '/search', '/revoke'].includes(pathname)) category = 'General Games'
     if (pathname.startsWith('/sims4/')) category = 'The Sims 4'
-    if (['/studio', '/log', '/accounts'].includes(pathname)) category = 'Workspace & Log'
+    if (['/files', '/studio', '/drive-status', '/log', '/accounts'].includes(pathname)) category = 'Workspace & Log'
 
     return (
       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[var(--text-4)]">

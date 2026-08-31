@@ -9,17 +9,30 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    let email = null;
     const url = new URL(req.url);
-    const email = url.searchParams.get('email');
+    email = url.searchParams.get('email');
+
+    if (!email) {
+      try {
+        const body = await req.json();
+        email = body?.email;
+      } catch (_) {}
+    }
 
     if (email) {
       // Sync 1 workspace saja
       const result = await syncWorkspaceCatalog(email);
-      return NextResponse.json({ results: [{ email, ...result }] });
+      return NextResponse.json({ 
+        success: true, 
+        added: result.added || 0,
+        removed: result.removed || 0,
+        results: [{ email, ...result }] 
+      });
     } else {
       // Sync semua workspace
       const { results } = await syncAllCatalogs();
-      return NextResponse.json({ results });
+      return NextResponse.json({ success: true, results });
     }
   } catch (error) {
     console.error('Catalog sync error:', error);

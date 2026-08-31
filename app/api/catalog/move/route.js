@@ -2,11 +2,15 @@ import { NextResponse } from 'next/server'
 import { getClientForEmail } from '@/lib/googleClient'
 import connectDB from '@/lib/db'
 import GameCatalog from '@/models/GameCatalog'
-
-// const SHARED_DRIVE_ID = '0ALxyHsjPxl82Uk9PVA' // Tidak dipakai lagi karena direct transfer
+import { auth } from '@/app/api/auth/[...nextauth]/route'
 
 export async function POST(req) {
   try {
+    const session = await auth()
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { sourceEmail, targetEmail, folderId, gameName } = await req.json()
 
     if (!sourceEmail || !targetEmail || !folderId || !gameName) {
@@ -19,7 +23,7 @@ export async function POST(req) {
 
     await connectDB()
 
-    // 1. Ambil record sumber dari DB untuk mengambil meta (size, totalFiles)
+    // 1. Ambil record sumber dari DB untuk mengambil meta (totalSize, fileCount)
     const sourceRecord = await GameCatalog.findOne({ ownerEmail: sourceEmail, folderId })
     if (!sourceRecord) {
       return NextResponse.json({ error: 'Record sumber tidak ditemukan di katalog' }, { status: 404 })
@@ -56,11 +60,14 @@ export async function POST(req) {
     const previousParents = folderMeta.data.parents ? folderMeta.data.parents.join(',') : ''
 
     // Tambahkan ke My Drive si Target
-    await targetDrive.files.update({
+    const updateParams = {
       fileId: folderId,
       addParents: targetRootId,
-      removeParents: previousParents,
-    })
+    }
+    if (previousParents) {
+      updateParams.removeParents = previousParents
+    }
+    await targetDrive.files.update(updateParams)
 
     // 4. Update Database
     // Hapus record lama
@@ -73,8 +80,8 @@ export async function POST(req) {
         name: sourceRecord.name,
         folderId: sourceRecord.folderId,
         ownerEmail: targetEmail,
-        size: sourceRecord.size,
-        totalFiles: sourceRecord.totalFiles
+        totalSize: sourceRecord.totalSize || 0,
+        fileCount: sourceRecord.fileCount || 0
       })
     }
 

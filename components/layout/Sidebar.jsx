@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import {
   Search, Settings, Clock, Users, Gamepad2, Grid2X2,
-  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud, Telescope, DownloadCloud, RefreshCw
+  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud, Telescope, DownloadCloud, RefreshCw, Folder
 } from 'lucide-react'
 
 const navGroups = [
@@ -29,6 +29,7 @@ const navGroups = [
   {
     label: 'Workspace & Log',
     items: [
+      { href: '/files', icon: Folder, label: 'File Manager' },
       { href: '/studio', icon: HardDrive, label: 'Upload Studio' },
       { href: '/drive-status', icon: Cloud, label: 'Status Drive' },
       { href: '/log', icon: Clock, label: 'Log Transaksi' },

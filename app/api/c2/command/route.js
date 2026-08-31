@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import connectToDatabase from '@/lib/db'
 import RemoteCommand from '@/models/RemoteCommand'
+import { auth } from '@/app/api/auth/[...nextauth]/route'
 
 // Middleware to check C2 Secret
 function checkAuth(req) {
@@ -9,6 +10,12 @@ function checkAuth(req) {
     return false
   }
   return true
+}
+
+async function verifyCaller(req) {
+  if (checkAuth(req)) return true
+  const session = await auth()
+  return !!session?.user?.email
 }
 
 // GET /api/c2/command - For Desktop App to poll for new commands (Protected by C2_SECRET_KEY)
@@ -33,8 +40,12 @@ export async function GET(req) {
   }
 }
 
-// POST /api/c2/command - For Mobile App to send a command (Protected by NextAuth, but we'll simulate for now)
+// POST /api/c2/command - For Dashboard / Mobile to send a command (Protected by NextAuth or C2 Secret)
 export async function POST(req) {
+  if (!(await verifyCaller(req))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const data = await req.json()
     const { machineId = 'mygameon-pc-1', type, payload } = data

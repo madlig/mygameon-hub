@@ -63,7 +63,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   async session({ session, token }) {
     session.accessToken = token.accessToken
-    session.refreshToken = token.refreshToken
     session.error = token.error
     return session
   },

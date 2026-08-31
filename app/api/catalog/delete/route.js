@@ -2,9 +2,15 @@ import { NextResponse } from 'next/server'
 import { getClientForEmail } from '@/lib/googleClient'
 import connectToDatabase from '@/lib/db'
 import GameCatalog from '@/models/GameCatalog'
+import { auth } from '@/app/api/auth/[...nextauth]/route'
 
 export async function DELETE(request) {
   try {
+    const session = await auth()
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { folderId, ownerEmail } = await request.json()
 
     if (!folderId || !ownerEmail) {
