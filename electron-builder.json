@@ -2,6 +2,9 @@
   "appId": "com.mygameon.studio",
   "productName": "MyGameON Studio",
   "asar": true,
+  "asarUnpack": [
+    ".next/standalone/**/*"
+  ],
   "directories": {
     "output": "dist",
     "buildResources": "build"

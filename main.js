@@ -252,7 +252,10 @@ function createWindow() {
     }, 3000);
   } else {
     // Mode Production
-    const standaloneDir = path.join(app.getAppPath(), '.next', 'standalone');
+    const basePath = app.isPackaged
+      ? app.getAppPath().replace('app.asar', 'app.asar.unpacked')
+      : app.getAppPath();
+    const standaloneDir = path.join(basePath, '.next', 'standalone');
     const serverPath = path.join(standaloneDir, 'server.js');
 
     const { parsedEnv, sourceFound } = resolveEnvConfig();
@@ -294,6 +297,7 @@ function createWindow() {
       fs.mkdirSync(logsDir, { recursive: true });
     }
     const logStream = fs.createWriteStream(path.join(logsDir, 'next.log'), { flags: 'a' });
+    logStream.write(`[main] Starting Next.js standalone server from: ${serverPath}\n`);
 
     nextProcess = fork(serverPath, [], {
       env: {
@@ -307,8 +311,14 @@ function createWindow() {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     });
 
+    nextProcess.on('error', (err) => {
+      console.error('[main] Next.js process failed to spawn:', err);
+      logStream.write(`[spawn error] ${err.stack || err.message}\n`);
+    });
+
     nextProcess.on('exit', (code, signal) => {
       console.log(`[main] Next.js process exited: code=${code} signal=${signal}`);
+      logStream.write(`[exit] Next.js process exited with code=${code} signal=${signal}\n`);
       nextProcess = null;
     });
 
