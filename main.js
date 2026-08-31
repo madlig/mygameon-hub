@@ -2,6 +2,14 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 if (require('electron-squirrel-startup')) return app.quit();
 
+process.on('uncaughtException', (err) => {
+  console.error('[main] Uncaught Exception:', err);
+  if (err && err.code === 'ENOENT' && err.message && err.message.includes('MyGameON Studio.exe')) {
+    console.log('[main] Handled installer relaunch spawn gracefully');
+    return;
+  }
+});
+
 const path = require('path');
 const fs = require('fs');
 const { fork, spawn, execSync } = require('child_process');
@@ -199,7 +207,17 @@ ipcMain.on('check-for-updates', () => {
 
 ipcMain.on('quit-and-install', () => {
   if (!app.isPackaged) return;
-  autoUpdater.quitAndInstall(false, true); // (isSilent, isForceRunAfter)
+  try {
+    setImmediate(() => {
+      app.removeAllListeners('window-all-closed');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.destroy();
+      }
+      autoUpdater.quitAndInstall(true, true);
+    });
+  } catch (e) {
+    console.error('[main] quitAndInstall error:', e);
+  }
 });
 
 ipcMain.handle('get-app-version', () => {
