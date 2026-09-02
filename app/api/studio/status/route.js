@@ -45,7 +45,7 @@ export async function GET() {
   try {
     // 1. Prioritaskan status lokal dari studio-state.json (Electron Desktop Mode)
     const localState = getLocalJobState()
-    if (localState && (localState.status === 'processing' || (localState.logs && localState.logs.length > 0))) {
+    if (localState && (localState.status === 'processing' || localState.status === 'success' || localState.status === 'error')) {
       return NextResponse.json(localState)
     }
 
@@ -53,11 +53,12 @@ export async function GET() {
     await connectDB()
     const state = await DesktopState.findOne({ machineId: 'mygameon-pc-1' })
     
-    if (state && state.currentTask && state.currentTask.status === 'processing') {
+    if (state && state.currentTask && (state.currentTask.status === 'processing' || state.currentTask.status === 'success' || state.currentTask.status === 'error')) {
       return NextResponse.json({
         status: state.currentTask.status,
         progress: state.currentTask.progress || 0,
-        text: state.currentTask.text || ''
+        text: state.currentTask.text || '',
+        logs: []
       })
     }
 

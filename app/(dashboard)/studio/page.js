@@ -158,7 +158,14 @@ export default function StudioPage() {
         const state = await res.json()
         if (state && state.status) {
           setProcessState((prev) => {
-            if (prev.status === 'processing' && state.status === 'idle') return prev
+            if (state.status === 'success' || state.status === 'error') return state
+            if (state.status === 'processing') return state
+            if (state.status === 'idle') {
+              if (prev.status === 'processing') {
+                return { status: 'success', progress: 100, text: 'Proses selesai dengan sukses.' }
+              }
+              return state
+            }
             return state
           })
         }
@@ -166,9 +173,17 @@ export default function StudioPage() {
         const res = await fetch('/api/c2/state')
         const json = await res.json()
         if (json.success && json.state && json.state.currentTask) {
+          const state = json.state.currentTask
           setProcessState((prev) => {
-            if (prev.status === 'processing' && json.state.currentTask.status === 'idle') return prev
-            return json.state.currentTask
+            if (state.status === 'success' || state.status === 'error') return state
+            if (state.status === 'processing') return state
+            if (state.status === 'idle') {
+              if (prev.status === 'processing') {
+                return { status: 'success', progress: 100, text: 'Proses selesai dengan sukses.' }
+              }
+              return state
+            }
+            return state
           })
         }
       }
