@@ -571,11 +571,17 @@ export default function StudioPage() {
               </button>
             </div>
 
-            {/* Search Folder */}
-            <div className="mb-3">
+            {/* Search Folder & Path Info */}
+            <div className="space-y-2 mb-3">
+              {data.path && (
+                <div className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5 text-[10px] text-[var(--text-3)] font-mono border border-white/5">
+                  <span className="truncate max-w-[240px]" title={data.path}>📁 {data.path}</span>
+                  <span className="shrink-0 font-bold text-[var(--primary)]">{filteredFolders.length} Item</span>
+                </div>
+              )}
               <input
                 type="text"
-                placeholder="Cari folder game..."
+                placeholder="Cari folder / game..."
                 value={folderSearch}
                 onChange={(e) => setFolderSearch(e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-[var(--text)] placeholder:text-[var(--text-4)] focus:border-[var(--primary)] focus:outline-none"
@@ -593,14 +599,15 @@ export default function StudioPage() {
                 <div className="p-8 text-center border-2 border-dashed border-white/5 rounded-xl">
                   <FileArchive size={28} className="text-white/10 mx-auto mb-2" />
                   <p className="text-xs text-[var(--text-3)] font-semibold">Tidak Ada Folder Game</p>
-                  <p className="text-[10px] text-[var(--text-4)] mt-1">Letakkan folder game pada direktori staging Anda.</p>
+                  <p className="text-[10px] text-[var(--text-4)] mt-1">Letakkan folder game pada direktori staging:</p>
+                  <p className="text-[9px] font-mono text-[var(--primary)] mt-1 break-all">{data.path || 'D:\\Game\\Shopee\\GameUpload'}</p>
                 </div>
               ) : (
                 filteredFolders.map((folder) => {
                   const isSelected = selectedFolder?.name === folder.name
                   return (
                     <button
-                      key={folder.name}
+                      key={folder.name + (folder.path || '')}
                       onClick={() => {
                         setSelectedFolder(folder)
                         // Auto check if this game already exists in catalog
@@ -626,12 +633,16 @@ export default function StudioPage() {
                         <span className={`text-xs font-bold truncate ${isSelected ? 'text-[var(--primary)]' : 'text-[var(--text)]'}`}>
                           {folder.name}
                         </span>
-                        {folder.hasArchive ? (
+                        {folder.isArchiveFile ? (
+                          <span className="mt-1 flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold text-blue-400 border border-blue-500/20">
+                            📦 File Arsip ({folder.archiveParts} Part • {folder.formattedSize || 'Siap'})
+                          </span>
+                        ) : folder.hasArchive ? (
                           <span className="mt-1 flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold text-emerald-400 border border-emerald-500/20">
                             ✓ Siap Upload ({folder.archiveParts} Part)
                           </span>
                         ) : (
-                          <span className="mt-0.5 text-[9px] text-[var(--text-4)]">Folder Mentah (Butuh Arsip)</span>
+                          <span className="mt-0.5 text-[9px] text-[var(--text-4)]">📂 Folder Mentah (Butuh Arsip)</span>
                         )}
                       </div>
                       {isSelected && <ChevronRight size={16} className="text-[var(--primary)] shrink-0" />}
