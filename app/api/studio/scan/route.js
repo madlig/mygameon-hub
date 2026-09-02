@@ -56,32 +56,32 @@ function scanLocalDirectory(targetPath) {
   if (!fs.existsSync(targetPath)) return []
 
   const items = fs.readdirSync(targetPath)
-  const results = []
+  const gameMap = new Map()
 
+  // PASS 1: Daftarkan semua folder mentah terlebih dahulu
   for (const item of items) {
     if (item.startsWith('.') || item === '$RECYCLE.BIN' || item === 'System Volume Information' || item === 'node_modules') continue
 
     const fullPath = path.join(targetPath, item)
     try {
       const stats = fs.statSync(fullPath)
-
       if (stats.isDirectory()) {
-        // 1. Cek part .rar di level folder staging yang cocok dengan nama folder
+        // Cek apakah ada file part .rar di DALAM folder tersebut
+        let insideParts = []
+        try {
+          insideParts = fs.readdirSync(fullPath).filter((f) => f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
+        } catch (_) {}
+
+        // Cek apakah ada part .rar di level parent yang cocok dengan nama folder ini
         const parentParts = items.filter(
           (f) => f.startsWith(item) && (f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
         )
 
-        // 2. Cek apakah ada file part .rar di DALAM folder tersebut
-        let insideParts = []
-        try {
-          const subItems = fs.readdirSync(fullPath)
-          insideParts = subItems.filter((f) => f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
-        } catch (_) {}
-
         const partsCount = parentParts.length > 0 ? parentParts.length : insideParts.length
         const hasArchive = partsCount > 0
+        const key = item.toLowerCase()
 
-        results.push({
+        gameMap.set(key, {
           name: item,
           path: fullPath,
           isDirectory: true,
@@ -91,31 +91,57 @@ function scanLocalDirectory(targetPath) {
           size: stats.size,
           mtime: stats.mtime
         })
-      } else if (stats.isFile() && (item.endsWith('.rar') || item.endsWith('.7z') || item.endsWith('.zip'))) {
-        // Handle standalone archive file di root direktori upload
+      }
+    } catch (_) {}
+  }
+
+  // PASS 2: Deteksi file arsip (.rar, .7z, .zip) dan GABUNGKAN jika foldernya sudah ada (Deduplikasi Cerdas)
+  for (const item of items) {
+    if (item.startsWith('.') || item === '$RECYCLE.BIN' || item === 'System Volume Information' || item === 'node_modules') continue
+
+    const fullPath = path.join(targetPath, item)
+    try {
+      const stats = fs.statSync(fullPath)
+      if (stats.isFile() && (item.endsWith('.rar') || item.endsWith('.7z') || item.endsWith('.zip'))) {
         const isSecondaryPart = /\.part(0*[2-9]|[1-9][0-9]+)\.rar$/i.test(item)
         if (!isSecondaryPart) {
           const baseName = item.replace(/\.part0*1\.rar$/i, '').replace(/\.(rar|7z|zip)$/i, '')
+          const key = baseName.toLowerCase()
+
+          // Hitung total part arsip bersaudara
           const siblingParts = items.filter(
             (f) => f.startsWith(baseName) && (f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
           )
-          results.push({
-            name: baseName,
-            path: fullPath,
-            isDirectory: false,
-            isArchiveFile: true,
-            hasArchive: true,
-            archiveParts: Math.max(1, siblingParts.length),
-            size: stats.size,
-            formattedSize: formatBytes(stats.size),
-            mtime: stats.mtime
-          })
+          const partsCount = Math.max(1, siblingParts.length)
+
+          if (gameMap.has(key)) {
+            // FOLDER SUDAH ADA: GABUNGKAN MENJADI 1 ENTITAS TUNGGAL!
+            const existing = gameMap.get(key)
+            existing.hasArchive = true
+            existing.archiveParts = partsCount
+            existing.archivePath = fullPath
+            existing.formattedSize = formatBytes(stats.size)
+          } else {
+            // File arsip berdiri sendiri tanpa folder mentah
+            gameMap.set(key, {
+              name: baseName,
+              path: fullPath,
+              archivePath: fullPath,
+              isDirectory: false,
+              isArchiveFile: true,
+              hasArchive: true,
+              archiveParts: partsCount,
+              size: stats.size,
+              formattedSize: formatBytes(stats.size),
+              mtime: stats.mtime
+            })
+          }
         }
       }
     } catch (_) {}
   }
 
-  return results
+  return Array.from(gameMap.values())
 }
 
 export async function GET(request) {

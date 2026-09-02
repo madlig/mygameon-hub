@@ -13,14 +13,100 @@ process.on('uncaughtException', (err) => {
 const path = require('path');
 const fs = require('fs');
 const { fork, spawn, execSync } = require('child_process');
-const { startC2Client, stopC2Client } = require('./lib/c2Client');
 
-// Enforce single instance lock
+// ── 1. ENFORCE SINGLE INSTANCE LOCK ──
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
   process.exit(0);
 }
+
+// ── 2. GLOBAL ENVIRONMENT BOOTSTRAPPER (SINGLE SOURCE OF TRUTH) ──
+function parseEnvFile(filePath) {
+  const parsedEnv = {};
+  if (!fs.existsSync(filePath)) return parsedEnv;
+
+  let content = fs.readFileSync(filePath, 'utf-8');
+  // Strip UTF-8 BOM if present
+  content = content.replace(/^\uFEFF/, '');
+
+  const lines = content.split(/\r?\n/);
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.startsWith('#')) continue;
+    if (line.startsWith('export ')) {
+      line = line.substring(7).trim();
+    }
+
+    const match = line.match(/^([\w.-]+)\s*=\s*(.*)$/);
+    if (match) {
+      const key = match[1].trim();
+      let value = match[2] ? match[2].trim() : '';
+
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      parsedEnv[key] = value;
+    }
+  }
+  return parsedEnv;
+}
+
+function resolveEnvConfig() {
+  const possiblePaths = [
+    // 1. Persistent UserData directory in AppData (Survives all updates and reinstalls)
+    path.join(app.getPath('userData'), '.env.local'),
+    // 2. ExtraResources in app resources directory
+    path.join(process.resourcesPath || '', '.env.local'),
+    // 3. Next to application executable
+    path.join(path.dirname(app.getPath('exe')), '.env.local'),
+    // 4. In app path / asar root
+    path.join(app.getAppPath(), '.env.local'),
+    // 5. In current working directory
+    path.join(process.cwd(), '.env.local'),
+  ];
+
+  let parsedEnv = {};
+  let sourceFound = null;
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        const parsed = parseEnvFile(p);
+        if (parsed.MONGODB_URI || parsed.GOOGLE_CLIENT_ID || parsed.ADMIN_EMAIL || parsed.AUTH_SECRET) {
+          parsedEnv = parsed;
+          sourceFound = p;
+          break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  // If found in a temporary or bundled location, persist a copy to userData so future updates always have it!
+  const userDataEnv = path.join(app.getPath('userData'), '.env.local');
+  if (sourceFound && sourceFound !== userDataEnv) {
+    try {
+      if (!fs.existsSync(app.getPath('userData'))) {
+        fs.mkdirSync(app.getPath('userData'), { recursive: true });
+      }
+      fs.copyFileSync(sourceFound, userDataEnv);
+      console.log(`[main] Cached .env.local to persistent userData: ${userDataEnv}`);
+    } catch (e) {
+      console.error('[main] Failed to cache .env.local to userData:', e);
+    }
+  }
+
+  return { parsedEnv, sourceFound };
+}
+
+// Inisialisasi variabel environment ke process.env secara global sejak awal
+const { parsedEnv: globalEnv, sourceFound: envSourceFound } = resolveEnvConfig();
+Object.assign(process.env, globalEnv);
+if (globalEnv.GH_TOKEN) process.env.GH_TOKEN = globalEnv.GH_TOKEN;
+console.log(`[main] Bootstrapped ${Object.keys(globalEnv).length} environment variables from: ${envSourceFound || 'none'}`);
+
+// Muat C2 client setelah environment siap
+const { startC2Client, stopC2Client } = require('./lib/c2Client');
 
 let mainWindow;
 let nextProcess;
@@ -74,83 +160,6 @@ function killProcessOnPort(port) {
   } catch (_) {
     // No process on port — normal case
   }
-}
-
-function parseEnvFile(filePath) {
-  const parsedEnv = {};
-  if (!fs.existsSync(filePath)) return parsedEnv;
-
-  let content = fs.readFileSync(filePath, 'utf-8');
-  // Strip UTF-8 BOM if present
-  content = content.replace(/^\uFEFF/, '');
-
-  const lines = content.split(/\r?\n/);
-  for (let line of lines) {
-    line = line.trim();
-    if (!line || line.startsWith('#')) continue;
-    if (line.startsWith('export ')) {
-      line = line.substring(7).trim();
-    }
-
-    const match = line.match(/^([\w.-]+)\s*=\s*(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      let value = match[2] ? match[2].trim() : '';
-
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      parsedEnv[key] = value;
-    }
-  }
-  return parsedEnv;
-}
-
-function resolveEnvConfig() {
-  const possiblePaths = [
-    // 1. Persistent UserData directory in AppData (Survives all updates and reinstalls)
-    path.join(app.getPath('userData'), '.env.local'),
-    // 2. ExtraResources in app resources directory
-    path.join(process.resourcesPath, '.env.local'),
-    // 3. Next to application executable
-    path.join(path.dirname(app.getPath('exe')), '.env.local'),
-    // 4. In app path / asar root
-    path.join(app.getAppPath(), '.env.local'),
-    // 5. In current working directory
-    path.join(process.cwd(), '.env.local'),
-  ];
-
-  let parsedEnv = {};
-  let sourceFound = null;
-
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      try {
-        const parsed = parseEnvFile(p);
-        if (parsed.MONGODB_URI || parsed.GOOGLE_CLIENT_ID || parsed.ADMIN_EMAIL || parsed.AUTH_SECRET) {
-          parsedEnv = parsed;
-          sourceFound = p;
-          break;
-        }
-      } catch (_) {}
-    }
-  }
-
-  // If found in a temporary or bundled location, persist a copy to userData so future updates always have it!
-  const userDataEnv = path.join(app.getPath('userData'), '.env.local');
-  if (sourceFound && sourceFound !== userDataEnv) {
-    try {
-      if (!fs.existsSync(app.getPath('userData'))) {
-        fs.mkdirSync(app.getPath('userData'), { recursive: true });
-      }
-      fs.copyFileSync(sourceFound, userDataEnv);
-      console.log(`[main] Cached .env.local to persistent userData: ${userDataEnv}`);
-    } catch (e) {
-      console.error('[main] Failed to cache .env.local to userData:', e);
-    }
-  }
-
-  return { parsedEnv, sourceFound };
 }
 
 function setupAutoUpdater() {
@@ -208,6 +217,10 @@ ipcMain.on('check-for-updates', () => {
 ipcMain.on('quit-and-install', () => {
   if (!app.isPackaged) return;
   try {
+    // 🛡️ Bersihkan semua proses anak dan port sebelum installer berjalan
+    killNextProcess();
+    killProcessOnPort(3000);
+
     setImmediate(() => {
       app.removeAllListeners('window-all-closed');
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -243,6 +256,18 @@ function createWindow() {
     },
   });
 
+  // 🛡️ Cegah Blank Putih jika load awal sempat gagal
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    if (validatedURL && validatedURL.includes('localhost:3000')) {
+      console.warn(`[main] did-fail-load pada ${validatedURL}: ${errorDescription} (${errorCode}). Menjadwalkan ulang reload...`);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.loadURL('http://localhost:3000').catch(() => {});
+        }
+      }, 2000);
+    }
+  });
+
   const isDev = !app.isPackaged;
 
   if (isDev) {
@@ -258,26 +283,19 @@ function createWindow() {
     const standaloneDir = path.join(basePath, '.next', 'standalone');
     const serverPath = path.join(standaloneDir, 'server.js');
 
-    const { parsedEnv, sourceFound } = resolveEnvConfig();
-
-    if (sourceFound) {
+    if (envSourceFound) {
       const envDest = path.join(standaloneDir, '.env.local');
       try {
-        fs.copyFileSync(sourceFound, envDest);
+        fs.copyFileSync(envSourceFound, envDest);
       } catch (e) {
         console.error('Failed to copy .env.local to standalone directory:', e);
       }
     }
-    
-    // Auto-Updater requires GH_TOKEN to access private GitHub Releases
-    if (parsedEnv.GH_TOKEN || process.env.GH_TOKEN) {
-      process.env.GH_TOKEN = parsedEnv.GH_TOKEN || process.env.GH_TOKEN;
-    }
 
     // Validate required env keys
     const requiredKeys = ['MONGODB_URI', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ADMIN_EMAIL'];
-    const missingKeys = requiredKeys.filter((k) => !parsedEnv[k] && !process.env[k]);
-    if (!parsedEnv['AUTH_SECRET'] && !parsedEnv['NEXTAUTH_SECRET'] && !process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
+    const missingKeys = requiredKeys.filter((k) => !process.env[k]);
+    if (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
       missingKeys.push('AUTH_SECRET/NEXTAUTH_SECRET');
     }
 
@@ -302,7 +320,7 @@ function createWindow() {
     nextProcess = fork(serverPath, [], {
       env: {
         ...process.env,
-        ...parsedEnv,
+        ELECTRON_RUN_AS_NODE: '1',
         NODE_ENV: 'production',
         PORT: '3000',
         HOSTNAME: '127.0.0.1',
@@ -367,8 +385,8 @@ function createWindow() {
                 <body>
                   <div class="card">
                     <h1>Gagal Memuat Server Next.js</h1>
-                    <p>Server internal tidak memberikan respons dalam 15 detik. Hal ini dapat terjadi jika port 3000 terpakai atau konfigurasi server bermasalah.</p>
-                    <button onclick="location.href='http://localhost:3000'">Coba Lagi (Retry)</button>
+                    <p>Server internal sedang melakukan inisialisasi ulang. Silakan tekan tombol di bawah untuk menyambungkan kembali.</p>
+                    <button onclick="location.reload()">Coba Lagi (Retry)</button>
                   </div>
                 </body>
                 </html>
