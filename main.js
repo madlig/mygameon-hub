@@ -1,4 +1,5 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+app.setName('MyGameON Studio');
 const { autoUpdater } = require('electron-updater');
 if (require('electron-squirrel-startup')) return app.quit();
 
@@ -53,8 +54,11 @@ function parseEnvFile(filePath) {
 }
 
 function resolveEnvConfig() {
+  const appData = process.env.APPDATA || (process.platform === 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + '/.config');
   const possiblePaths = [
-    // 1. Persistent UserData directory in AppData (Survives all updates and reinstalls)
+    // 1. Persistent UserData directories in AppData (MyGameON Studio & mygameon-hub)
+    path.join(appData, 'MyGameON Studio', '.env.local'),
+    path.join(appData, 'mygameon-hub', '.env.local'),
     path.join(app.getPath('userData'), '.env.local'),
     // 2. ExtraResources in app resources directory
     path.join(process.resourcesPath || '', '.env.local'),
@@ -73,26 +77,36 @@ function resolveEnvConfig() {
     if (fs.existsSync(p)) {
       try {
         const parsed = parseEnvFile(p);
-        if (parsed.MONGODB_URI || parsed.GOOGLE_CLIENT_ID || parsed.ADMIN_EMAIL || parsed.AUTH_SECRET) {
+        if (parsed.MONGODB_URI || parsed.GOOGLE_CLIENT_ID || parsed.ADMIN_EMAIL || parsed.AUTH_SECRET || parsed.GEMINI_API_KEY) {
           parsedEnv = parsed;
           sourceFound = p;
-          break;
+          // If this file has GEMINI_API_KEY, use it as primary
+          if (parsed.GEMINI_API_KEY) {
+            break;
+          }
         }
       } catch (_) {}
     }
   }
 
-  // If found in a temporary or bundled location, persist a copy to userData so future updates always have it!
-  const userDataEnv = path.join(app.getPath('userData'), '.env.local');
-  if (sourceFound && sourceFound !== userDataEnv) {
-    try {
-      if (!fs.existsSync(app.getPath('userData'))) {
-        fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  // Ensure persistent copies are synchronized across both AppData folders
+  const targetDirs = [
+    path.join(appData, 'MyGameON Studio'),
+    path.join(appData, 'mygameon-hub'),
+  ];
+
+  if (sourceFound) {
+    for (const dir of targetDirs) {
+      const dest = path.join(dir, '.env.local');
+      try {
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (sourceFound !== dest) {
+          fs.copyFileSync(sourceFound, dest);
+          console.log(`[main] Synced .env.local to: ${dest}`);
+        }
+      } catch (e) {
+        console.error(`[main] Failed to sync .env.local to ${dest}:`, e);
       }
-      fs.copyFileSync(sourceFound, userDataEnv);
-      console.log(`[main] Cached .env.local to persistent userData: ${userDataEnv}`);
-    } catch (e) {
-      console.error('[main] Failed to cache .env.local to userData:', e);
     }
   }
 
@@ -320,6 +334,7 @@ function createWindow() {
     nextProcess = fork(serverPath, [], {
       env: {
         ...process.env,
+        ...globalEnv,
         ELECTRON_RUN_AS_NODE: '1',
         NODE_ENV: 'production',
         PORT: '3000',
