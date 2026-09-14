@@ -30,6 +30,7 @@
 *credentials*.json
 *secret*.json
 *.log
+*.psd
 
 # debug
 npm-debug.log*

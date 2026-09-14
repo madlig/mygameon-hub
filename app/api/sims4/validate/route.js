@@ -40,8 +40,9 @@ export async function GET(request) {
     const key = (searchParams.get('key') || '').trim();
     const uuid = (searchParams.get('uuid') || '').trim();
     const username = (searchParams.get('username') || '').trim();
+    const allHwids = (searchParams.get('all_hwids') || searchParams.get('all_ids') || '').trim();
 
-    return await handleValidation(key, uuid, username);
+    return await handleValidation(key, uuid, username, allHwids);
   } catch (err) {
     console.error('[API sims4/validate GET Error]:', err);
     return textResponse('SERVER_ERROR: ' + err.message, 500);
@@ -53,6 +54,7 @@ export async function POST(request) {
     let key = '';
     let uuid = '';
     let username = '';
+    let allHwids = '';
 
     const contentType = request.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -60,21 +62,23 @@ export async function POST(request) {
       key = (body.key || '').trim();
       uuid = (body.uuid || '').trim();
       username = (body.username || '').trim();
+      allHwids = (body.all_hwids || body.all_ids || '').trim();
     } else {
       const formData = await request.formData();
       key = (formData.get('key') || '').toString().trim();
       uuid = (formData.get('uuid') || '').toString().trim();
       username = (formData.get('username') || '').toString().trim();
+      allHwids = (formData.get('all_hwids') || formData.get('all_ids') || '').toString().trim();
     }
 
-    return await handleValidation(key, uuid, username);
+    return await handleValidation(key, uuid, username, allHwids);
   } catch (err) {
     console.error('[API sims4/validate POST Error]:', err);
     return textResponse('SERVER_ERROR: ' + err.message, 500);
   }
 }
 
-async function handleValidation(key, uuid, username) {
+async function handleValidation(key, uuid, username, allHwids = '') {
   if (!key) {
     return textResponse('INVALID_KEY');
   }
@@ -115,6 +119,7 @@ async function handleValidation(key, uuid, username) {
               $setOnInsert: {
                 invoice: foundRow[0].toString().trim(),
                 hwid: rowHwid,
+                hwids: rowHwid ? [rowHwid] : [],
                 cc: rowCC === 'Y' ? 'Y' : 'N',
                 status: rowStatus,
                 email: rowEmail,
@@ -138,36 +143,80 @@ async function handleValidation(key, uuid, username) {
     return textResponse('BANNED');
   }
 
-  const existingHwid = (license.hwid || '').trim();
-
-  // Kasus 1: HWID belum terikat -> Bind perangkat untuk pertama kali secara atomic
-  if (!existingHwid) {
-    if (uuid) {
-      const updatedLicense = await Sims4License.findOneAndUpdate(
-        { _id: license._id, hwid: { $in: ['', null] } },
-        { $set: { hwid: uuid } },
-        { new: true }
-      );
-      if (updatedLicense) {
-        license = updatedLicense;
-      }
-
-      // Sinkronkan ke Google Sheets di background (non-blocking)
-      if (process.env.GSHEET_SIMS4_ID) {
-        updateSheetHwid(license.invoice, uuid).catch((e) =>
-          console.error('[sims4/validate] Background sheet update failed:', e.message)
-        );
+  // Siapkan daftar candidate hardware IDs yang dikirim client
+  const candidateList = [];
+  if (uuid) candidateList.push(uuid);
+  if (allHwids) {
+    const parts = allHwids.split(',');
+    for (const p of parts) {
+      const t = p.trim();
+      if (t && !candidateList.includes(t)) {
+        candidateList.push(t);
       }
     }
+  }
+
+  // Kumpulkan semua hardware anchor yang sah dan terdaftar pada lisensi ini
+  const registeredAnchors = new Set();
+  if (license.hwid && license.hwid.trim()) {
+    registeredAnchors.add(license.hwid.trim().toUpperCase());
+  }
+  if (Array.isArray(license.hwids)) {
+    for (const h of license.hwids) {
+      if (h && h.trim()) registeredAnchors.add(h.trim().toUpperCase());
+    }
+  }
+
+  // ── KASUS 1: Lisensi Belum Terikat Perangkat (First-Time Activation) ──
+  if (registeredAnchors.size === 0) {
+    const primaryId = candidateList[0] || uuid || '';
+    const boundArray = candidateList.length > 0 ? candidateList : (primaryId ? [primaryId] : []);
+
+    if (boundArray.length > 0) {
+      await Sims4License.updateOne(
+        { _id: license._id },
+        { 
+          $set: { 
+            hwid: primaryId,
+            hwids: boundArray 
+          } 
+        }
+      );
+
+      // Sinkronkan ke Google Sheets di background (non-blocking fallback)
+      if (process.env.GSHEET_SIMS4_ID) {
+        updateSheetHwid(license.invoice, primaryId).catch(() => {});
+      }
+    }
+
     return textResponse(license.cc === 'Y' ? 'VALID_CC' : 'VALID');
   }
 
-  // Kasus 2: HWID sudah terikat -> Verifikasi kecocokan ID perangkat
-  if (!uuid || existingHwid.toUpperCase() !== uuid.toUpperCase()) {
-    return textResponse('INVALID_DEVICE');
+  // ── KASUS 2: Lisensi Sudah Terikat -> Validasi Multi-Anchor Cerdas ──
+  let isMatched = false;
+  for (const cand of candidateList) {
+    if (registeredAnchors.has(cand.toUpperCase())) {
+      isMatched = true;
+      break;
+    }
   }
 
-  return textResponse(license.cc === 'Y' ? 'VALID_CC' : 'VALID');
+  if (isMatched) {
+    // Self-Healing: Jika ada ID baru yang sah dari perangkat yang sama,
+    // tambahkan ke daftar hwids agar login selanjutnya semakin kebal error
+    const newAnchors = candidateList.filter(c => !registeredAnchors.has(c.toUpperCase()));
+    if (newAnchors.length > 0) {
+      Sims4License.updateOne(
+        { _id: license._id },
+        { $addToSet: { hwids: { $each: newAnchors } } }
+      ).catch(() => {});
+    }
+
+    return textResponse(license.cc === 'Y' ? 'VALID_CC' : 'VALID');
+  }
+
+  // Jika tidak ada satu pun ID hardware yang cocok -> Terkunci di perangkat lain
+  return textResponse('INVALID_DEVICE');
 }
 
 async function updateSheetHwid(invoice, hwid) {

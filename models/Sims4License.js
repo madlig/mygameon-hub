@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const Sims4LicenseSchema = new mongoose.Schema({
   invoice: { type: String, required: true, unique: true },
   hwid: { type: String, default: '' },
+  hwids: { type: [String], default: [] },
   cc: { type: String, enum: ['Y', 'N'], default: 'N' },
   status: { type: String, enum: ['Active', 'Banned'], default: 'Active' },
   email: { type: String, default: '', lowercase: true, trim: true },

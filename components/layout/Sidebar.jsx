@@ -14,7 +14,7 @@ const navGroups = [
     label: 'General Games',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard' },
-      { href: '/scout', icon: Telescope, label: 'Game Scout (AI)' },
+      { href: '/scout', icon: Sparkles, label: 'Listing Studio' },
       { href: '/search', icon: Search, label: 'Cari Game' },
       { href: '/revoke', icon: Users, label: 'CRM Pelanggan' },
     ],
