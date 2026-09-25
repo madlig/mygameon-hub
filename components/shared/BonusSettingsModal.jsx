@@ -69,7 +69,7 @@ export default function BonusSettingsModal({ onClose }) {
         <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-white/5 px-6 py-4">
           <div>
             <h2 className="text-lg font-black text-[var(--text)]">Pengaturan Skema Bonus</h2>
-            <p className="text-xs font-medium text-[var(--text-3)] mt-1">Atur program "Beli X Gratis Y"</p>
+            <p className="text-xs font-medium text-[var(--text-3)] mt-1">Atur program &quot;Beli X Gratis Y&quot;</p>
           </div>
           <button onClick={onClose} className="rounded-full p-2 text-[var(--text-3)] hover:bg-white/10 hover:text-[var(--text)] transition-colors">
             <X size={18} />
@@ -142,7 +142,7 @@ export default function BonusSettingsModal({ onClose }) {
                   ))
                 )}
                 <p className="text-[10px] text-[var(--text-4)] mt-2 italic">
-                  * Sistem akan otomatis mengevaluasi aturan dari jumlah "Min Beli" yang paling besar terlebih dahulu.
+                  * Sistem akan otomatis mengevaluasi aturan dari jumlah &quot;Min Beli&quot; yang paling besar terlebih dahulu.
                 </p>
               </div>
 

@@ -4,6 +4,7 @@ import connectToDatabase from '@/lib/db';
 import WorkspaceAccount from '@/models/WorkspaceAccount';
 import GameCatalog from '@/models/GameCatalog';
 import { getClientForEmail } from '@/lib/googleClient';
+import { resolveTargetFolderId } from '@/lib/studioProcessor';
 
 export async function POST(req) {
   try {
@@ -28,7 +29,7 @@ export async function POST(req) {
 
     // 2. Ambil target gameFolderId
     const targetAccount = await WorkspaceAccount.findOne({ email: targetEmail }).lean();
-    const targetGameFolderId = targetAccount?.gameFolderId || 'root';
+    let targetGameFolderId = resolveTargetFolderId(targetAccount?.gameFolderId);
 
     const sourceDrive = await getClientForEmail(sourceEmail);
     const targetDrive = await getClientForEmail(targetEmail);
@@ -69,7 +70,16 @@ export async function POST(req) {
       updateParams.removeParents = previousParents;
     }
 
-    await targetDrive.files.update(updateParams);
+    try {
+      await targetDrive.files.update(updateParams);
+    } catch (moveErr) {
+      if (moveErr.message?.includes('File not found') && targetGameFolderId !== 'root') {
+        updateParams.addParents = 'root';
+        await targetDrive.files.update(updateParams);
+      } else {
+        throw moveErr;
+      }
+    }
 
     // 6. Update database katalog
     await GameCatalog.deleteOne({ _id: sourceRecord._id });

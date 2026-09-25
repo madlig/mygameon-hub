@@ -47,23 +47,38 @@ export async function POST(request) {
 
         // 2. Buat folder baru di workspace target
         sendProgress({ status: 'info', text: 'Membuat folder baru di workspace tujuan...' });
-        let targetGameFolderId = 'root';
         const WorkspaceAccount = (await import('@/models/WorkspaceAccount')).default;
         await connectToDatabase();
         const acc = await WorkspaceAccount.findOne({ email: targetEmail }).lean();
-        if (acc && acc.gameFolderId && acc.gameFolderId !== 'root') {
-          targetGameFolderId = acc.gameFolderId;
-        }
+        const rawIds = (acc?.gameFolderId || 'root').split(',').map(s => s.trim()).filter(Boolean);
+        let targetGameFolderId = rawIds.find(id => id.toLowerCase() !== 'root') || 'root';
 
-        const folderRes = await targetDrive.files.create({
-          supportsAllDrives: true,
-          requestBody: {
-            name: gameName,
-            mimeType: 'application/vnd.google-apps.folder',
-            parents: [targetGameFolderId],
-          },
-          fields: 'id',
-        });
+        let folderRes;
+        try {
+          folderRes = await targetDrive.files.create({
+            supportsAllDrives: true,
+            requestBody: {
+              name: gameName,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [targetGameFolderId],
+            },
+            fields: 'id',
+          });
+        } catch (createErr) {
+          if (createErr.message?.includes('File not found') && targetGameFolderId !== 'root') {
+            folderRes = await targetDrive.files.create({
+              supportsAllDrives: true,
+              requestBody: {
+                name: gameName,
+                mimeType: 'application/vnd.google-apps.folder',
+                parents: ['root'],
+              },
+              fields: 'id',
+            });
+          } else {
+            throw createErr;
+          }
+        }
         const newFolderId = folderRes.data.id;
 
         // 3. Ambil daftar file part di sourceFolder

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, X, ShoppingCart, CornerDownLeft, ListPlus, AlertCircle, Star, Package, Copy, Trash2, Loader2, Database, Box, Gamepad2, HardDrive, Check, Plus } from 'lucide-react'
+import { Search, X, ShoppingCart, CornerDownLeft, ListPlus, AlertCircle, Star, Package, Copy, Trash2, Loader2, Database, Box, Gamepad2, HardDrive, Check, Plus, Globe } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import GameItem from '@/components/shared/GameItem'
 import QuickPick from '@/components/shared/QuickPick'
@@ -68,6 +68,8 @@ export default function SearchPage() {
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, item: null, isDeleting: false })
   const [backupModal, setBackupModal] = useState({ isOpen: false, item: null, targetEmail: '', accounts: [], isLoading: false, progressText: '', progressValue: 0, isCopying: false })
   const [moveModal, setMoveModal] = useState({ isOpen: false, item: null, targetEmail: '', accounts: [], isLoading: false, isMoving: false })
+  const [syncingWebSearch, setSyncingWebSearch] = useState(false)
+  const [syncWebMsg, setSyncWebMsg] = useState(null)
 
   const debounceRef = useRef(null)
   const reqIdRef = useRef(0)
@@ -242,7 +244,31 @@ export default function SearchPage() {
   // ── Preview ukuran (Deprecated) ──
   // Hapus handleInfo karena ukuran diambil instan dari DB
 
-  // ── Action Buttons (Backup & Delete) ──
+  // ── Action Buttons (Backup & Delete & Sync Web) ──
+  async function handleSyncWebFromSearch(item) {
+    if (!item) return
+    setSyncingWebSearch(true)
+    setSyncWebMsg(null)
+    try {
+      const folderId = item.id || item.sources?.[0]?.folderId
+      const res = await fetch('/api/catalog/enrich-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId, name: item.name }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setSyncWebMsg({ type: 'success', text: `Berhasil sinkronisasi ke website! (${data.data?.cleanTitle || item.name})` })
+      } else {
+        setSyncWebMsg({ type: 'error', text: data.error || 'Gagal sinkronisasi ke website' })
+      }
+    } catch (e) {
+      setSyncWebMsg({ type: 'error', text: 'Gagal terhubung ke endpoint sinkronisasi' })
+    } finally {
+      setSyncingWebSearch(false)
+    }
+  }
+
   async function handleDeleteConfirm() {
     const { item } = deleteModal
     if (!item) return
@@ -970,6 +996,29 @@ export default function SearchPage() {
 
                 {/* Footer Actions */}
                 <div className="shrink-0 pt-4 border-t border-[var(--border-soft)]">
+                    {syncWebMsg && (
+                        <div className={`mb-3 p-2.5 text-xs rounded-xl border flex items-center gap-2 ${
+                            syncWebMsg.type === 'success' 
+                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                                : 'bg-red-500/10 border-red-500/20 text-red-400'
+                        }`}>
+                            {syncWebMsg.type === 'success' ? <Check size={14} className="shrink-0" /> : <AlertCircle size={14} className="shrink-0" />}
+                            <span>{syncWebMsg.text}</span>
+                        </div>
+                    )}
+
+                    <button
+                        onClick={() => handleSyncWebFromSearch(detailsModal.item)}
+                        disabled={syncingWebSearch}
+                        className="w-full mb-3 flex items-center justify-center gap-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 py-2.5 text-xs font-bold transition-all hover:bg-purple-500 hover:text-white disabled:opacity-50"
+                    >
+                        {syncingWebSearch ? (
+                            <><Loader2 size={14} className="animate-spin" /> Menghubungkan RAWG / Steam &amp; Firestore...</>
+                        ) : (
+                            <><Globe size={14} /> Sync / Publish ke Website MyGameON</>
+                        )}
+                    </button>
+
                     <div className="grid grid-cols-2 gap-3 mb-3">
                         <button 
                             onClick={() => { setDetailsModal({ isOpen: false, item: null, info: null, loading: false, error: null }); openMoveModal(detailsModal.item); }}

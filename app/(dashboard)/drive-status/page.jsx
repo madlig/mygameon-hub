@@ -232,12 +232,12 @@ export default function DriveStatusPage() {
 
         <div className="mb-6 rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4">
           <h4 className="text-sm font-bold text-yellow-600 mb-1 flex items-center gap-2">
-            <AlertTriangle size={16} /> Penting: Tentang "Limit Quota Download"
+            <AlertTriangle size={16} /> Penting: Tentang &quot;Limit Quota Download&quot;
           </h4>
           <p className="text-xs text-yellow-600/80 leading-relaxed">
-            Halaman ini hanya memantau <strong>Kapasitas Storage (Ruang Penyimpanan)</strong>, bukan Kuota Download (Bandwidth). Google Drive tidak menyediakan cara untuk mengecek Kuota Download. Jika customer mengeluh terkena limit download meskipun status storage di sini "Aman", itu berarti file tersebut sedang di-download oleh terlalu banyak orang dalam 24 jam terakhir. 
+            Halaman ini hanya memantau <strong>Kapasitas Storage (Ruang Penyimpanan)</strong>, bukan Kuota Download (Bandwidth). Google Drive tidak menyediakan cara untuk mengecek Kuota Download. Jika customer mengeluh terkena limit download meskipun status storage di sini &quot;Aman&quot;, itu berarti file tersebut sedang di-download oleh terlalu banyak orang dalam 24 jam terakhir. 
             <br/><br/>
-            <strong>Solusi:</strong> Minta customer untuk menggunakan trik Bypass (tambahkan <i>shortcut</i> ke My Drive mereka dan download folder tersebut), atau gunakan fitur "Pindah Instan" untuk menggandakan game ini ke Workspace lain agar beban download terbagi.
+            <strong>Solusi:</strong> Minta customer untuk menggunakan trik Bypass (tambahkan <i>shortcut</i> ke My Drive mereka dan download folder tersebut), atau gunakan fitur &quot;Pindah Instan&quot; untuk menggandakan game ini ke Workspace lain agar beban download terbagi.
           </p>
         </div>
 

@@ -1,6 +1,6 @@
 {
   "name": "mygameon-hub",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "author": "MyGameON",
   "description": "MyGameON Studio Desktop App",
   "main": "main.js",
@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "dev:electron": "concurrently -k \"npm run dev\" \"electron .\"",
     "build:electron": "node -e \"const fs=require('fs'); try{fs.rmSync('dist', {recursive:true, force:true, maxRetries:10, retryDelay:200})}catch(e){} try{fs.rmSync('.next', {recursive:true, force:true, maxRetries:10, retryDelay:200})}catch(e){}\" && npm run build && node scripts/resolve-symlinks.js && node scripts/build-publish.js",
     "deploy": "git add . && (git diff-index --quiet HEAD || git commit -m \"chore: auto deploy and release\") && npm version patch --force && git push --follow-tags && npm run build:electron",

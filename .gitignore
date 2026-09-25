@@ -31,6 +31,14 @@
 *secret*.json
 *.log
 *.psd
+listing_output/
+*deduplication*.json
+*duplicates*.json
+*candidates*.json
+*missing_games*.json
+*backup_deleted*.json
+round2_map.json
+title_fixes.json
 
 # debug
 npm-debug.log*
@@ -51,3 +59,7 @@ yarn-error.log*
 next-env.d.ts
 dist/  
 .claude/
+studio-state.json
+studio-config.json
+studio-queue.json
+scratch/

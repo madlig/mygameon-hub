@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, CheckCircle2, AlertTriangle, ExternalLink, HardDrive, FileText, Loader2, Folder, Layers } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, ExternalLink, HardDrive, FileText, Loader2, Folder, Layers, Globe } from 'lucide-react';
 
 function formatBytes(bytes, decimals = 2) {
   if (!bytes || bytes === 0) return '0 B';
@@ -16,6 +16,34 @@ export default function FileInspectModal({ isOpen, onClose, file, email, onInspe
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSyncingWeb, setIsSyncingWeb] = useState(false);
+  const [syncSuccessMsg, setSyncSuccessMsg] = useState(null);
+
+  const handleSyncToWebsite = async () => {
+    if (!file) return;
+    setIsSyncingWeb(true);
+    setSyncSuccessMsg(null);
+    try {
+      const res = await fetch('/api/catalog/enrich-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: file.id, name: file.name }),
+      });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        setSyncSuccessMsg(`Live di Web: ${resData.data?.cleanTitle || file.name}`);
+        if (onInspectSuccess) {
+          onInspectSuccess(file.id, data?.stats?.totalBytes || file.totalSize, data?.stats?.totalCount || file.fileCount);
+        }
+      } else {
+        alert(resData.error || 'Gagal sinkronisasi ke website');
+      }
+    } catch (e) {
+      alert('Gagal menghubungi endpoint sinkronisasi');
+    } finally {
+      setIsSyncingWeb(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen || !file || !email) return;
@@ -190,13 +218,31 @@ export default function FileInspectModal({ isOpen, onClose, file, email, onInspe
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end border-t border-white/5 bg-[#0a0b0f] px-6 py-3">
-          <button
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-[var(--text-2)] hover:bg-white/10 hover:text-[var(--text)] transition-colors"
-          >
-            Tutup
-          </button>
+        <div className="flex items-center justify-between border-t border-white/5 bg-[#0a0b0f] px-6 py-3">
+          <div>
+            {syncSuccessMsg && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                <CheckCircle2 size={13} /> {syncSuccessMsg}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSyncToWebsite}
+              disabled={isSyncingWeb}
+              className="flex items-center gap-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 text-xs font-bold text-blue-400 hover:bg-blue-500/20 transition-all disabled:opacity-50 cursor-pointer"
+              title="Tarik data resmi Steam & Publish ke etalase Website (Firestore)"
+            >
+              {isSyncingWeb ? <Loader2 size={13} className="animate-spin" /> : <Globe size={13} />}
+              <span>Sync ke Website</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold text-[var(--text-2)] hover:bg-white/10 hover:text-[var(--text)] transition-colors cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
         </div>
 
       </div>

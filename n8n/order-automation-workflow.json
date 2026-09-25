@@ -1,0 +1,176 @@
+{
+  "name": "MyGameON - Automated Order Fulfillment & Telegram Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mygameon-order",
+        "options": {}
+      },
+      "name": "Webhook Ingestion",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "webhook-node-1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalisasi payload order dari berbagai sumber (Shopee, Tokopedia, Web MyGameON, dsb)\nconst payload = $input.first().json.body || $input.first().json;\n\nconst customerEmail = (payload.customerEmail || payload.email || payload.buyer_email || '').toLowerCase().trim();\nconst invoice = (payload.invoice || payload.order_id || payload.order_sn || `MGO-${Date.now().toString(36).toUpperCase()}`).trim();\nconst platform = payload.platform || (payload.order_sn ? 'shopee' : 'website');\n\n// Format items agar selalu berupa array terstruktur\nlet items = [];\nif (Array.isArray(payload.items) && payload.items.length > 0) {\n  items = payload.items.map(item => typeof item === 'string' ? { name: item } : item);\n} else if (payload.game_name || payload.product_name) {\n  items = [{\n    name: payload.game_name || payload.product_name,\n    type: payload.type || (String(payload.product_name || '').toLowerCase().includes('sims') ? 'sims4' : 'game'),\n    allowCC: payload.allowCC !== undefined ? payload.allowCC : true\n  }];\n}\n\nreturn [{\n  json: {\n    customerEmail,\n    invoice,\n    platform,\n    items,\n    sendEmail: payload.sendEmail !== false,\n    expirationDays: payload.expirationDays || null,\n    notes: payload.notes || ''\n  }\n}];"
+      },
+      "name": "Normalize Order Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "id": "code-normalize-2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3001/api/webhook/order",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer mgo_wh_sec_99a8b7c6d5e4f3a2b1"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "name": "Fulfill via MyGameON Hub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "id": "http-hub-3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Order Processed OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        900,
+        300
+      ],
+      "id": "if-success-4"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "=🎉 *PESANAN BERHASIL DIPROSES OTOMATIS*\n───────────────────────\n🧾 *Invoice:* `{{ $json.invoice }}`\n📧 *Email:* `{{ $json.customerEmail }}`\n🏪 *Platform:* `{{ $json.platform }}`\n🎮 *Item:* {{ $json.processedCount }} produk\n\n*Daftar Game / Lisensi:*\n{{ ($json.processedItems || []).map(item => (item.isSims4 ? '💎 [Sims 4 Key: ' + item.invoice + '] ' : '📁 [Google Drive] ') + item.name).join('\\n') }}\n\n✅ *Akses Drive:* Diberikan Otomatis\n📬 *Email Konfirmasi:* {{ $json.emailSent ? 'Terkirim via Gmail' : 'Dilewati' }}\n⏰ *Waktu:* {{ $json.timestamp }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Telegram: Send Success Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1140,
+        200
+      ],
+      "id": "telegram-success-5"
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "=⚠️ *PERINGATAN: PESANAN GAGAL DIPROSES*\n───────────────────────\n🧾 *Invoice:* `{{ $('Normalize Order Payload').item.json.invoice }}`\n📧 *Email:* `{{ $('Normalize Order Payload').item.json.customerEmail }}`\n🏪 *Platform:* `{{ $('Normalize Order Payload').item.json.platform }}`\n\n❌ *Penyebab:* `{{ $json.error || 'Beberapa item gagal diberikan hak akses' }}`\n\nMohon segera cek dashboard MyGameON Hub untuk tindak lanjut manual.",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "name": "Telegram: Send Failure Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1140,
+        420
+      ],
+      "id": "telegram-failure-6"
+    }
+  ],
+  "connections": {
+    "Webhook Ingestion": {
+      "main": [
+        [
+          {
+            "node": "Normalize Order Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Order Payload": {
+      "main": [
+        [
+          {
+            "node": "Fulfill via MyGameON Hub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fulfill via MyGameON Hub": {
+      "main": [
+        [
+          {
+            "node": "Order Processed OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Processed OK?": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Send Success Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram: Send Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

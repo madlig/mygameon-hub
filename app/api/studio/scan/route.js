@@ -35,22 +35,10 @@ function formatBytes(bytes, decimals = 1) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
 }
 
-function resolveUploadDirectory() {
-  const possiblePaths = [
-    process.env.STUDIO_UPLOAD_DIR,
-    'D:\\Game\\Shopee\\GameUpload',
-    'D:\\Game\\Shopee',
-    'C:\\Game\\Shopee\\GameUpload',
-  ].filter(Boolean)
+import { resolveUploadDirectory } from '@/lib/studioConfig'
 
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
-      return p
-    }
-  }
+export { resolveUploadDirectory, scanLocalDirectory }
 
-  return possiblePaths[0] || 'D:\\Game\\Shopee\\GameUpload'
-}
 
 function scanLocalDirectory(targetPath) {
   if (!fs.existsSync(targetPath)) return []
@@ -67,15 +55,15 @@ function scanLocalDirectory(targetPath) {
       const stats = fs.statSync(fullPath)
       if (stats.isDirectory()) {
         // Cek apakah ada file part .rar di DALAM folder tersebut
+        const escapedItem = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const itemRegex = new RegExp(`^${escapedItem}(\\.part\\d+)?\\.(rar|7z|zip|r\\d+)$`, 'i')
         let insideParts = []
         try {
-          insideParts = fs.readdirSync(fullPath).filter((f) => f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
+          insideParts = fs.readdirSync(fullPath).filter((f) => itemRegex.test(f))
         } catch (_) {}
 
         // Cek apakah ada part .rar di level parent yang cocok dengan nama folder ini
-        const parentParts = items.filter(
-          (f) => f.startsWith(item) && (f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
-        )
+        const parentParts = items.filter((f) => itemRegex.test(f))
 
         const partsCount = parentParts.length > 0 ? parentParts.length : insideParts.length
         const hasArchive = partsCount > 0
@@ -109,9 +97,9 @@ function scanLocalDirectory(targetPath) {
           const key = baseName.toLowerCase()
 
           // Hitung total part arsip bersaudara
-          const siblingParts = items.filter(
-            (f) => f.startsWith(baseName) && (f.endsWith('.rar') || f.endsWith('.7z') || f.endsWith('.zip'))
-          )
+          const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const baseRegex = new RegExp(`^${escapedBase}(\\.part\\d+)?\\.(rar|7z|zip|r\\d+)$`, 'i')
+          const siblingParts = items.filter((f) => baseRegex.test(f))
           const partsCount = Math.max(1, siblingParts.length)
 
           if (gameMap.has(key)) {
@@ -150,8 +138,10 @@ export async function GET(request) {
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const targetPath = resolveUploadDirectory()
+ 
+    const { searchParams } = new URL(request.url)
+    const requestedPath = searchParams.get('path')
+    const targetPath = resolveUploadDirectory(requestedPath)
     const isLocalDiskAvailable = fs.existsSync(targetPath)
 
     if (isLocalDiskAvailable) {

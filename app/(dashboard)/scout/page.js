@@ -23,6 +23,36 @@ export default function ShopeeListingStudio() {
   const [generateState, setGenerateState] = useState({ status: 'idle', result: null, error: null })
   const [copyFeedback, setCopyFeedback] = useState({ title: false, desc: false })
   const [isOpeningFolder, setIsOpeningFolder] = useState(false)
+  const [isAiGenerating, setIsAiGenerating] = useState(false)
+  const [aiError, setAiError] = useState(null)
+
+  // 0. Racik SEO & Deskripsi dengan Gemini AI
+  async function handleAiGenerate() {
+    if (!title) return
+    setIsAiGenerating(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameTitle: title,
+          gameSynopsis: searchState.data?.synopsis || description || title
+        })
+      })
+      const json = await res.json()
+      if (json.success && json.data) {
+        if (json.data.title) setSeoTitle(json.data.title)
+        if (json.data.description) setDescription(json.data.description)
+      } else {
+        setAiError(json.error || 'Gagal meracik SEO dengan AI')
+      }
+    } catch (err) {
+      setAiError(err.message || 'Gagal menghubungi server Gemini AI')
+    } finally {
+      setIsAiGenerating(false)
+    }
+  }
 
   // 1. Search Steam API
   async function handleSearch(e) {
@@ -287,14 +317,41 @@ export default function ShopeeListingStudio() {
 
                 {/* SEO Title */}
                 <div className="mb-5">
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
                     <label className="text-xs font-bold text-[var(--text-2)] uppercase tracking-wider">
                       Judul Produk Shopee
                     </label>
-                    <span className={`text-xs font-mono font-bold ${isTitleTooLong ? 'text-red-400' : 'text-[var(--primary)]'}`}>
-                      {titleLength}/120 Karakter
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleAiGenerate}
+                        disabled={isAiGenerating || !title}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-[var(--primary)] border border-[var(--primary)]/30 transition-all disabled:opacity-50 cursor-pointer"
+                        title="Racik Judul SEO & Deskripsi AIDA menggunakan Gemini AI"
+                      >
+                        {isAiGenerating ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            <span>Meracik AI...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={12} />
+                            <span>Racik via Gemini AI</span>
+                          </>
+                        )}
+                      </button>
+                      <span className={`text-xs font-mono font-bold ${isTitleTooLong ? 'text-red-400' : 'text-[var(--primary)]'}`}>
+                        {titleLength}/120 Karakter
+                      </span>
+                    </div>
                   </div>
+                  {aiError && (
+                    <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-400 flex items-center gap-2">
+                      <AlertCircle size={13} />
+                      <span>{aiError}</span>
+                    </div>
+                  )}
                   <div className="relative">
                     <textarea
                       rows={2}

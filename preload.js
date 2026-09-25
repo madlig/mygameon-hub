@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateError: (callback) => ipcRenderer.on('update_error', (_event, err) => callback(err)),
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   quitAndInstall: () => ipcRenderer.send('quit-and-install'),
-  getAppVersion: () => ipcRenderer.invoke('get-app-version')
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:select-directory', defaultPath)
 });
+

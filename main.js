@@ -251,6 +251,18 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+ipcMain.handle('dialog:select-directory', async (_event, defaultPath) => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Pilih Direktori Staging Game',
+    properties: ['openDirectory', 'createDirectory'],
+    defaultPath: defaultPath && fs.existsSync(defaultPath) ? defaultPath : undefined
+  });
+  if (result.canceled || !result.filePaths.length) return null;
+  return result.filePaths[0];
+});
+
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,

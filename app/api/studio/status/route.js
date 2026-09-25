@@ -45,7 +45,8 @@ export async function GET() {
   try {
     // 1. Prioritaskan status lokal dari studio-state.json (Electron Desktop Mode)
     const localState = getLocalJobState()
-    if (localState && (localState.status === 'processing' || localState.status === 'success' || localState.status === 'error')) {
+    const activeStatuses = ['processing', 'paused', 'cancelled', 'success', 'error']
+    if (localState && activeStatuses.includes(localState.status)) {
       return NextResponse.json(localState)
     }
 
@@ -53,17 +54,18 @@ export async function GET() {
     await connectDB()
     const state = await DesktopState.findOne({ machineId: 'mygameon-pc-1' })
     
-    if (state && state.currentTask && (state.currentTask.status === 'processing' || state.currentTask.status === 'success' || state.currentTask.status === 'error')) {
+    if (state && state.currentTask && activeStatuses.includes(state.currentTask.status)) {
       return NextResponse.json({
         status: state.currentTask.status,
         progress: state.currentTask.progress || 0,
         text: state.currentTask.text || '',
-        logs: []
+        logs: [],
+        errorDetail: state.currentTask.errorDetail || null,
       })
     }
 
     // 3. Status Netral (Idle) jika tidak ada task yang sedang berjalan
-    return NextResponse.json({ status: 'idle', progress: 0, text: '', logs: [] })
+    return NextResponse.json({ status: 'idle', progress: 0, text: '', logs: [], errorDetail: null })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
@@ -71,11 +73,11 @@ export async function GET() {
 
 export async function DELETE() {
   try {
-    setLocalJobState({ status: 'idle', progress: 0, text: '', logs: [] })
+    setLocalJobState({ status: 'idle', progress: 0, text: '', logs: [], errorDetail: null })
     await connectDB()
     await DesktopState.updateOne(
       { machineId: 'mygameon-pc-1' },
-      { $set: { 'currentTask.status': 'idle', 'currentTask.progress': 0, 'currentTask.text': '' } }
+      { $set: { 'currentTask.status': 'idle', 'currentTask.progress': 0, 'currentTask.text': '', 'currentTask.errorDetail': null } }
     )
     return NextResponse.json({ success: true })
   } catch (err) {

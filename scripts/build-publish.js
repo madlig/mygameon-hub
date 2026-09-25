@@ -37,7 +37,20 @@ if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) {
   env.GH_TOKEN = ghToken;
   commandArgs = ['--publish', 'always'];
 } else {
-  console.log('\x1b[33m%s\x1b[0m', '⚠️ GH_TOKEN tidak ditemukan di .env.local atau environment. Build berjalan tanpa Auto Publish.');
+  // Coba ambil token dari GitHub CLI (gh auth token) jika terpasang
+  try {
+    const { execSync } = require('child_process');
+    const cliToken = execSync('gh auth token', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+    if (cliToken && cliToken.length > 10) {
+      console.log('\x1b[32m%s\x1b[0m', '✅ GH_TOKEN diperoleh dari GitHub CLI (`gh auth token`). Auto Publish diaktifkan!');
+      env.GH_TOKEN = cliToken;
+      commandArgs = ['--publish', 'always'];
+    }
+  } catch (_) {}
+}
+
+if (commandArgs.length === 0) {
+  console.log('\x1b[33m%s\x1b[0m', '⚠️ GH_TOKEN tidak ditemukan di .env.local, environment, atau gh CLI. Build berjalan tanpa Auto Publish.');
 }
 
 // Menjalankan electron-builder

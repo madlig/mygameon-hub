@@ -43,6 +43,10 @@ export async function GET(request) {
         isCataloged: true,
         catalogId: item._id,
         lastSyncedAt: item.lastSyncedAt,
+        firestoreSyncedAt: item.firestoreSyncedAt || null,
+        coverImageUrl: item.coverImageUrl || null,
+        steamAppId: item.steamAppId || null,
+        cleanTitle: item.cleanTitle || null,
         driveUrl: `https://drive.google.com/drive/folders/${item.folderId}`,
       }));
 
@@ -51,25 +55,35 @@ export async function GET(request) {
 
     // 2. Mode Live Scan Google Drive
     const acc = await WorkspaceAccount.findOne({ email }).lean();
-    const gameFolderId = acc?.gameFolderId || 'root';
+    const parentIds = (acc?.gameFolderId || 'root').split(',').map((id) => id.trim()).filter(Boolean);
     const drive = await getClientForEmail(email);
 
-    let pageToken;
     const driveFolders = [];
 
-    do {
-      const res = await drive.files.list({
-        q: `'${gameFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
-        pageSize: 100,
-        pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true,
-        fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
-      });
+    for (const parentId of parentIds) {
+      let pageToken;
+      try {
+        do {
+          const res = await drive.files.list({
+            q: `'${parentId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
+            pageSize: 100,
+            pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+            fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
+          });
 
-      driveFolders.push(...(res.data.files || []));
-      pageToken = res.data.nextPageToken;
-    } while (pageToken);
+          for (const f of res.data.files || []) {
+            if (!driveFolders.some((existing) => existing.id === f.id)) {
+              driveFolders.push(f);
+            }
+          }
+          pageToken = res.data.nextPageToken;
+        } while (pageToken);
+      } catch (scanErr) {
+        console.warn(`[files/list] Gagal scan folder ${parentId}:`, scanErr.message);
+      }
+    }
 
     // Filter pencarian jika ada
     const filteredDriveFolders = query
@@ -91,6 +105,10 @@ export async function GET(request) {
         createdTime: f.createdTime,
         modifiedTime: f.modifiedTime,
         lastSyncedAt: catalogEntry ? catalogEntry.lastSyncedAt : null,
+        firestoreSyncedAt: catalogEntry?.firestoreSyncedAt || null,
+        coverImageUrl: catalogEntry?.coverImageUrl || null,
+        steamAppId: catalogEntry?.steamAppId || null,
+        cleanTitle: catalogEntry?.cleanTitle || null,
         driveUrl: `https://drive.google.com/drive/folders/${f.id}`,
       };
     });

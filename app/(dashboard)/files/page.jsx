@@ -6,7 +6,7 @@ import TopBar from '@/components/layout/TopBar';
 import {
   Folder, Layers, Search, RefreshCw, HardDrive, ArrowRightLeft,
   Copy, Trash2, Plus, ExternalLink, AlertTriangle, CheckCircle2,
-  Loader2, Filter, Sparkles, ArrowUpDown, ShieldCheck, HelpCircle
+  Loader2, Filter, Sparkles, ArrowUpDown, ShieldCheck, HelpCircle, Globe
 } from 'lucide-react';
 
 import FileInspectModal from '@/components/files/FileInspectModal';
@@ -160,6 +160,33 @@ export default function FileManagerPage() {
       showToast('Gagal menghubungi server', 'error');
     } finally {
       setRegisteringId(null);
+    }
+  };
+
+  const [syncingWebId, setSyncingWebId] = useState(null);
+
+  // Handle sync game to Firestore website
+  const handleSyncToWebsite = async (file) => {
+    setSyncingWebId(file.id);
+    try {
+      const res = await fetch('/api/catalog/enrich-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: file.id, name: file.name }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`Game "${data.data?.cleanTitle || file.name}" berhasil disinkronkan ke etalase website!`, 'success');
+        setFiles((prev) =>
+          prev.map((f) => (f.id === file.id ? { ...f, firestoreSyncedAt: new Date(), isCataloged: true } : f))
+        );
+      } else {
+        showToast(data.error || 'Gagal sinkronisasi ke website', 'error');
+      }
+    } catch (err) {
+      showToast('Gagal terhubung ke endpoint sinkronisasi', 'error');
+    } finally {
+      setSyncingWebId(null);
     }
   };
 
@@ -385,25 +412,51 @@ export default function FileManagerPage() {
 
                     {/* Catalog Status */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      {file.isCataloged ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
-                          <ShieldCheck size={12} /> Terdaftar
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20">
-                          <AlertTriangle size={12} /> Belum Terdaftar
-                        </span>
-                      )}
+                      <div className="flex flex-col gap-1 items-start">
+                        {file.isCataloged ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/20">
+                            <ShieldCheck size={12} /> Terdaftar
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-bold text-amber-400 border border-amber-500/20">
+                            <AlertTriangle size={12} /> Belum Terdaftar
+                          </span>
+                        )}
+                        {file.firestoreSyncedAt && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[9px] font-bold text-blue-400 border border-blue-500/20" title={`Live di website sejak ${new Date(file.firestoreSyncedAt).toLocaleDateString('id-ID')}`}>
+                            <Globe size={10} /> Live di Web
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Actions Hub */}
                     <td className="py-3.5 px-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         
+                        {/* Sync Web Button */}
+                        <button
+                          onClick={() => handleSyncToWebsite(file)}
+                          disabled={syncingWebId === file.id}
+                          className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold transition-all cursor-pointer ${
+                            file.firestoreSyncedAt
+                              ? 'border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20'
+                              : 'border-[var(--primary)]/40 bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20'
+                          }`}
+                          title={file.firestoreSyncedAt ? 'Update & Refresh metadata Steam di Website' : 'Tarik data resmi Steam & Publish ke etalase Website'}
+                        >
+                          {syncingWebId === file.id ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Globe size={13} />
+                          )}
+                          <span className="hidden sm:inline">{file.firestoreSyncedAt ? 'Sync Web' : 'Publish'}</span>
+                        </button>
+
                         {/* Inspect Parts Button */}
                         <button
                           onClick={() => setInspectModal({ isOpen: true, file })}
-                          className="flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 text-xs font-semibold text-[var(--text-2)] hover:bg-white/10 hover:text-[var(--text)] transition-colors"
+                          className="flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 text-xs font-semibold text-[var(--text-2)] hover:bg-white/10 hover:text-[var(--text)] transition-colors cursor-pointer"
                           title="Inspeksi part file & cek kesehatan urutan"
                         >
                           <Layers size={13} className="text-amber-400" />
