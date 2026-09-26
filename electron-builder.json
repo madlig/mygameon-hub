@@ -17,7 +17,8 @@
     "public/**/*",
     "lib/**/*",
     "models/**/*",
-    "scripts/**/*"
+    "scripts/**/*",
+    "build/**/*"
   ],
   "extraResources": [
     {
@@ -29,13 +30,17 @@
     "main": "main.js"
   },
   "win": {
-    "target": "nsis"
+    "target": "nsis",
+    "icon": "build/icon.ico"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
-    "createStartMenuShortcut": true
+    "createStartMenuShortcut": true,
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico"
   },
   "publish": {
     "provider": "github",

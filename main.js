@@ -264,9 +264,14 @@ ipcMain.handle('dialog:select-directory', async (_event, defaultPath) => {
 
 
 function createWindow() {
+  const iconPath = path.join(__dirname, 'build', 'icon.ico');
+  const fallbackIcon = path.join(__dirname, 'public', 'icons', 'icon-512.png');
+  const appIcon = fs.existsSync(iconPath) ? iconPath : (fs.existsSync(fallbackIcon) ? fallbackIcon : undefined);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    icon: appIcon,
     autoHideMenuBar: true,
     title: 'MyGameON Studio',
     titleBarStyle: 'hidden',
