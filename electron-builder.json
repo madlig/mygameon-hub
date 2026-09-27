@@ -6,7 +6,7 @@
     ".next/standalone/**/*"
   ],
   "directories": {
-    "output": "dist",
+    "output": "dist-build",
     "buildResources": "build"
   },
   "files": [
