@@ -276,15 +276,14 @@ export default function DownloadHubPage() {
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-black uppercase tracking-wider text-[var(--text)] flex items-center gap-2">
                 <Sparkles size={14} className="text-[var(--primary)]" />
-                <span>Pusat Sumber Game (Bebas Iklan & Auto-Bypass)</span>
+                <span>Pusat Sumber Game (Firefox Terisolasi)</span>
               </span>
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                <ShieldCheck size={11} />
-                <span>AdBlock & Skip-Redirect ON</span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                🦊 Jendela Firefox Mandiri
               </span>
             </div>
             <p className="text-xs text-[var(--text-3)] leading-relaxed mb-4">
-              Buka situs penyedia game di bawah melalui <strong>In-App Protected Browser</strong>. Dilengkapi sistem pemblokir iklan (uBlock engine) dan pelindung pop-under otomatis, sehingga tombol <strong>Click&apos;n&apos;Load</strong> langsung bisa diklik ke JDownloader tanpa jebakan iklan.
+              Buka situs penyedia game di bawah melalui <strong>Jendela Firefox Terisolasi</strong>. Berjalan mandiri tanpa tercampur dengan tab pribadi Anda, kebal blokir Cloudflare, dan mendukung <strong>Click&apos;n&apos;Load</strong> ke JDownloader secara instan.
             </p>
           </div>
 
@@ -297,7 +296,7 @@ export default function DownloadHubPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-[var(--text)] hover:bg-white/10 hover:border-amber-400/40 hover:text-amber-300 transition-all cursor-pointer shadow-sm group"
             >
               <span>🎮 OvaGames.com</span>
-              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">Shield</span>
+              <span className="text-[9px] font-mono font-bold text-amber-400 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-500/30">Firefox</span>
               <ExternalLink size={11} className="opacity-50 group-hover:opacity-100" />
             </a>
             <a
@@ -308,7 +307,7 @@ export default function DownloadHubPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-[var(--text)] hover:bg-white/10 hover:border-blue-400/40 hover:text-blue-300 transition-all cursor-pointer shadow-sm group"
             >
               <span>⚡ SteamRip</span>
-              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">Shield</span>
+              <span className="text-[9px] font-mono font-bold text-blue-400 bg-blue-500/20 px-1.5 py-0.2 rounded border border-blue-500/30">Firefox</span>
               <ExternalLink size={11} className="opacity-50 group-hover:opacity-100" />
             </a>
             <a
@@ -319,7 +318,7 @@ export default function DownloadHubPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-[var(--text)] hover:bg-white/10 hover:border-purple-400/40 hover:text-purple-300 transition-all cursor-pointer shadow-sm group"
             >
               <span>📦 FitGirl Repacks</span>
-              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">Shield</span>
+              <span className="text-[9px] font-mono font-bold text-purple-400 bg-purple-500/20 px-1.5 py-0.2 rounded border border-purple-500/30">Firefox</span>
               <ExternalLink size={11} className="opacity-50 group-hover:opacity-100" />
             </a>
             <a
@@ -330,9 +329,33 @@ export default function DownloadHubPage() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-[var(--text)] hover:bg-white/10 hover:border-pink-400/40 hover:text-pink-300 transition-all cursor-pointer shadow-sm group"
             >
               <span>🚀 DODI Repacks</span>
-              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">Shield</span>
+              <span className="text-[9px] font-mono font-bold text-pink-400 bg-pink-500/20 px-1.5 py-0.2 rounded border border-pink-500/30">Firefox</span>
               <ExternalLink size={11} className="opacity-50 group-hover:opacity-100" />
             </a>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-white/5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--text-4)]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-amber-400">💡 Tips 1x Pasang:</span>
+              <span>Pasang ekstensi di jendela Firefox ini agar bebas iklan & auto-skip:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => handleOpenGameSource(e, 'https://addons.mozilla.org/en-US/firefox/addon/ublock-origin/', 'uBlock Origin')}
+                className="text-emerald-400 hover:underline font-bold cursor-pointer"
+              >
+                + Pasang uBlock Origin
+              </button>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={(e) => handleOpenGameSource(e, 'https://addons.mozilla.org/en-US/firefox/addon/violentmonkey/', 'Violentmonkey')}
+                className="text-blue-400 hover:underline font-bold cursor-pointer"
+              >
+                + Pasang Skip-Redirect
+              </button>
+            </div>
           </div>
         </div>
 
