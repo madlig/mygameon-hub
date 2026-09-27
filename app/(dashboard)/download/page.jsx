@@ -45,12 +45,13 @@ export default function DownloadHubPage() {
 
   useEffect(() => {
     fetchStatus()
-    // Polling setiap 8 detik untuk memantau progress unduhan
+    // Polling adaptif: 2.5 detik saat ada unduhan aktif agar speed & progress real-time, 8 detik saat idle
+    const pollInterval = (data.activeItems && data.activeItems.length > 0) ? 2500 : 8000
     const interval = setInterval(() => {
       fetchStatus(true)
-    }, 8000)
+    }, pollInterval)
     return () => clearInterval(interval)
-  }, [fetchStatus])
+  }, [fetchStatus, data.activeItems?.length])
 
   // ── 2. Toggle Auto-Handoff ──
   async function handleToggleAutoHandoff() {
@@ -433,34 +434,91 @@ export default function DownloadHubPage() {
               data.activeItems.map((item) => (
                 <div
                   key={item.folderName}
-                  className="rounded-xl border border-amber-500/30 bg-amber-950/10 p-3.5 space-y-2.5 shadow-md"
+                  className="rounded-xl border border-amber-500/30 bg-amber-950/15 p-4 space-y-3 shadow-lg transition-all"
                 >
+                  {/* Judul & Status Badge */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <span className="font-black text-xs text-amber-200 block truncate" title={item.folderName}>
                         📁 {item.folderName}
                       </span>
-                      <span className="text-[10px] font-mono text-[var(--text-4)] mt-0.5 block">
-                        Ukuran terunduh: <strong className="text-white">{item.totalSizeFormatted}</strong> ({item.fileCount} file)
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-[var(--text-3)] mt-1">
+                        <span>
+                          Terunduh: <strong className="text-white font-bold">{item.downloadedBytesFormatted || item.totalSizeFormatted}</strong>
+                          {item.targetBytesFormatted && item.targetBytesFormatted !== item.downloadedBytesFormatted && (
+                            <span className="text-[var(--text-4)]"> / {item.targetBytesFormatted}</span>
+                          )}
+                        </span>
+                        {item.activePartName && (
+                          <span className="text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30 text-[10px] font-bold">
+                            📦 {item.activePartName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-mono font-bold border ${
+                        item.status === 'extracting'
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                      }`}>
+                        <Loader2 size={11} className="animate-spin" />
+                        <span>{item.statusText}</span>
+                      </span>
+                      {item.status === 'downloading' && (
+                        <span className="text-xs font-mono font-black text-amber-400">
+                          {item.progressPercent || 0}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dynamic Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="w-full h-2 rounded-full bg-black/60 border border-white/5 overflow-hidden p-0.5">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ease-out ${
+                          item.status === 'extracting'
+                            ? 'bg-gradient-to-r from-blue-500 to-indigo-400 animate-pulse w-full'
+                            : 'bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400'
+                        }`}
+                        style={{
+                          width: item.status === 'extracting' ? '100%' : `${Math.max(item.progressPercent || 0, 2)}%`
+                        }}
+                      />
+                    </div>
+
+                    {/* Speed & ETA stats */}
+                    <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-3)] px-0.5">
+                      <div className="flex items-center gap-2">
+                        {item.downloadSpeedFormatted ? (
+                          <span className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            <Zap size={10} />
+                            <span>{item.downloadSpeedFormatted}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-4)]">Menghitung kecepatan...</span>
+                        )}
+                        {item.etaFormatted && (
+                          <span className="text-amber-300/80 font-medium">
+                            ⏱️ {item.etaFormatted}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[var(--text-4)] font-medium">
+                        {item.fileCount} berkas
                       </span>
                     </div>
-                    <span className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[9px] font-mono font-bold text-amber-300 border border-amber-500/30 shrink-0">
-                      <Loader2 size={10} className="animate-spin" />
-                      <span>{item.statusText}</span>
-                    </span>
                   </div>
 
-                  {/* Progress Pulse Bar */}
-                  <div className="w-full h-1.5 rounded-full bg-black/40 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full animate-pulse w-3/4" />
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-4)] pt-1 border-t border-white/5">
+                  {/* Footer Bar */}
+                  <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-4)] pt-2 border-t border-white/5">
                     <span>Aktivitas disk: {item.secondsSinceLastWrite}d lalu</span>
                     <button
                       type="button"
                       onClick={() => handleOpenFolder(item.fullPath)}
-                      className="text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-amber-400 hover:underline flex items-center gap-1 cursor-pointer font-bold"
                     >
                       <FolderOpen size={11} /> Buka Folder
                     </button>

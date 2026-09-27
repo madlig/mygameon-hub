@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import PreInstalledWizardModal from '@/components/studio/PreInstalledWizardModal'
 import { cleanReleaseName } from '@/lib/utils'
 
 
@@ -101,6 +102,7 @@ export default function StudioPage() {
   const [stagingPathModal, setStagingPathModal] = useState({ open: false, path: '', loading: false, error: null })
   const [confirmAction, setConfirmAction] = useState(null)
   const [crudMessage, setCrudMessage] = useState(null)
+  const [wizardFolder, setWizardFolder] = useState(null)
 
 
   // Advanced WinRAR Settings
@@ -1219,6 +1221,31 @@ export default function StudioPage() {
                         ? `${selectedFolder.archiveParts} Part Siap`
                         : 'Folder Mentah'}
                     </span>
+                  </div>
+
+                  {/* ⚡ Tombol Asisten Game Pre-Installed (Install & Update) */}
+                  <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3 flex items-center justify-between gap-3 shadow-md">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                        <Zap size={16} />
+                      </span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-xs text-white block truncate">
+                          Asisten Konversi Game Pre-Installed
+                        </span>
+                        <span className="text-[10px] text-[var(--text-3)] block truncate">
+                          Install file ISO & update menjadi game matang (Plug & Play) sebelum diarsip
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setWizardFolder(selectedFolder.name)}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-3 py-1.5 text-xs font-black text-black hover:from-amber-400 hover:to-amber-300 transition-all cursor-pointer shadow-md shrink-0"
+                    >
+                      <Play size={12} />
+                      <span>Jalankan Asisten</span>
+                    </button>
                   </div>
 
                   {/* 🌟 vs 🔄 The 2 High-Contrast Interactive Mode Cards */}
@@ -2777,6 +2804,21 @@ export default function StudioPage() {
           </div>
         </div>
       )}
+
+      {/* ⚡ Asisten Game Pre-Installed Modal */}
+      <PreInstalledWizardModal
+        isOpen={!!wizardFolder}
+        folderName={wizardFolder}
+        onClose={() => setWizardFolder(null)}
+        onSuccess={() => {
+          fetchScan(data.path)
+          setWizardFolder(null)
+          setCrudMessage({
+            type: 'success',
+            text: 'Game berhasil dimatangkan ke format Pre-Installed! Siap diarsip WinRAR.'
+          })
+        }}
+      />
 
     </div>
   )
