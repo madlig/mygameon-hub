@@ -11,13 +11,13 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { gameTitle, gameSynopsis } = await req.json()
+    const { gameTitle, gameSynopsis, packageType } = await req.json()
     
     if (!gameTitle || !gameSynopsis) {
       return NextResponse.json({ error: 'Data game tidak lengkap' }, { status: 400 })
     }
 
-    const result = await generateShopeeListing(gameTitle, gameSynopsis)
+    const result = await generateShopeeListing(gameTitle, gameSynopsis, packageType || 'PRE-INSTALLED')
     
     return NextResponse.json({ success: true, data: result })
   } catch (error) {

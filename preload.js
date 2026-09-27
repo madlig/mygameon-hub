@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   quitAndInstall: () => ipcRenderer.send('quit-and-install'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:select-directory', defaultPath)
+  selectDirectory: (defaultPath) => ipcRenderer.invoke('dialog:select-directory', defaultPath),
+  openGameBrowser: (url, title) => ipcRenderer.invoke('open-game-browser', { url, title })
 });
 

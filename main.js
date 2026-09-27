@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, session } = require('electron');
 app.setName('MyGameON Studio');
 const { autoUpdater } = require('electron-updater');
 if (require('electron-squirrel-startup')) return app.quit();
@@ -262,6 +262,203 @@ ipcMain.handle('dialog:select-directory', async (_event, defaultPath) => {
   return result.filePaths[0];
 });
 
+// ── 🛡️ IN-APP PROTECTED GAME BROWSER (ADBLOCK & AUTO-BYPASS SHIELD) ──
+let gameBrowserWindow = null;
+
+const BLOCKED_AD_URL_PATTERNS = [
+  '*://*.adsterra.com/*',
+  '*://*.propellerads.com/*',
+  '*://*.popads.net/*',
+  '*://*.popcash.net/*',
+  '*://*.exoclick.com/*',
+  '*://*.juicyads.com/*',
+  '*://*.onclickads.net/*',
+  '*://*.adcash.com/*',
+  '*://*.trafficjunky.com/*',
+  '*://*.yllix.com/*',
+  '*://*.histats.com/*',
+  '*://*.effectivecpmgate.com/*',
+  '*://*.highcpmgate.com/*',
+  '*://*.alwingulla.com/*',
+  '*://*.greatdexchange.com/*',
+  '*://*.syndication.exdynsrv.com/*',
+  '*://*.doubleclick.net/*',
+  '*://*.googlesyndication.com/*',
+  '*://*.adnxs.com/*',
+  '*://*.smartadserver.com/*',
+  '*://*.cpmstar.com/*',
+  '*://*.bidvertiser.com/*',
+  '*://*.infolinks.com/*',
+  '*://*.clickadu.com/*',
+  '*://*.hilltopads.net/*',
+  '*://*.monetag.com/*',
+  '*://*.rollerads.com/*',
+  '*://*.richpush.com/*',
+  '*://*.pushwoosh.com/*',
+  '*://*.onesignal.com/*',
+  '*://*/*popunder*',
+  '*://*/*banner*',
+  '*://*/*ad_iframe*'
+];
+
+const AD_KEYWORD_PATTERNS = [
+  'adsterra',
+  'propeller',
+  'popads',
+  'popcash',
+  'onclick',
+  'adcash',
+  'casino',
+  'slot-gacor',
+  'judi-online',
+  'taruhan',
+  'sbobet',
+  'maxwin',
+  'pragmatic'
+];
+
+let isSessionInitialized = false;
+
+function setupGameBrowserSession() {
+  const browserSession = session.fromPartition('persist:gamebrowser');
+
+  if (isSessionInitialized) return browserSession;
+  isSessionInitialized = true;
+
+  // 1. Blokir Request Jaringan ke Domain & URL Iklan
+  browserSession.webRequest.onBeforeRequest(
+    { urls: ['*://*/*'] },
+    (details, callback) => {
+      const lower = details.url.toLowerCase();
+
+      // Izinkan Click'n'Load ke JDownloader lokal
+      if (lower.startsWith('http://127.0.0.1:9666') || lower.startsWith('http://localhost:9666')) {
+        return callback({ cancel: false });
+      }
+
+      // Periksa domain terblokir
+      const isBlockedPattern = BLOCKED_AD_URL_PATTERNS.some((pattern) => {
+        const regexStr = pattern.replace(/\./g, '\\.').replace(/\*/g, '.*');
+        return new RegExp(`^${regexStr}$`, 'i').test(details.url);
+      });
+
+      if (isBlockedPattern) {
+        return callback({ cancel: true });
+      }
+
+      // Periksa kata kunci iklan agresif / judi
+      const isKeywordBlocked = AD_KEYWORD_PATTERNS.some((kw) => lower.includes(kw));
+      if (
+        isKeywordBlocked &&
+        !lower.includes('ovagames.com') &&
+        !lower.includes('filecrypt.cc') &&
+        !lower.includes('steamrip.com')
+      ) {
+        return callback({ cancel: true });
+      }
+
+      callback({ cancel: false });
+    }
+  );
+
+  // 2. Izinkan CORS / Mixed Content untuk Click'n'Load JDownloader
+  browserSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+    responseHeaders['Access-Control-Allow-Methods'] = ['GET, POST, OPTIONS'];
+    responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+    callback({ responseHeaders });
+  });
+
+  return browserSession;
+}
+
+function openGameBrowserWindow(targetUrl = 'https://www.ovagames.com', title = 'OvaGames') {
+  setupGameBrowserSession();
+
+  if (gameBrowserWindow && !gameBrowserWindow.isDestroyed()) {
+    gameBrowserWindow.focus();
+    if (targetUrl) gameBrowserWindow.loadURL(targetUrl);
+    return gameBrowserWindow;
+  }
+
+  const iconPath = path.join(__dirname, 'build', 'icon.ico');
+  const fallbackIcon = path.join(__dirname, 'public', 'icons', 'icon-512.png');
+  const appIcon = fs.existsSync(iconPath) ? iconPath : (fs.existsSync(fallbackIcon) ? fallbackIcon : undefined);
+
+  gameBrowserWindow = new BrowserWindow({
+    width: 1280,
+    height: 850,
+    icon: appIcon,
+    title: `MyGameON Shield Browser — ${title} [Bebas Iklan & Auto-Bypass]`,
+    autoHideMenuBar: true,
+    webPreferences: {
+      partition: 'persist:gamebrowser',
+      preload: path.join(__dirname, 'gameBrowserPreload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false // Mengizinkan Click'n'Load dari https://filecrypt.cc ke http://127.0.0.1:9666
+    }
+  });
+
+  // 🛡️ POPUP SHIELD: Tangani window.open liar dari website
+  gameBrowserWindow.webContents.setWindowOpenHandler(({ url }) => {
+    const lower = url.toLowerCase();
+    
+    // Periksa apakah URL iklan / scam judi
+    const isAd = AD_KEYWORD_PATTERNS.some((kw) => lower.includes(kw));
+    if (isAd) {
+      console.log('[main/shield] Memblokir pop-up liar:', url);
+      return { action: 'deny' };
+    }
+
+    // Jika URL adalah link download yang sah, muat di jendela yang sama
+    if (
+      lower.includes('filecrypt') ||
+      lower.includes('drive.google.com') ||
+      lower.includes('mega.nz') ||
+      lower.includes('qiwi.gg') ||
+      lower.includes('pixeldrain') ||
+      lower.includes('ovagames.com') ||
+      lower.includes('steamrip.com') ||
+      lower.includes('fitgirl') ||
+      lower.includes('dodi')
+    ) {
+      gameBrowserWindow.loadURL(url);
+      return { action: 'deny' };
+    }
+
+    // Default: tolak pop-up liar
+    return { action: 'deny' };
+  });
+
+  gameBrowserWindow.loadURL(targetUrl);
+
+  gameBrowserWindow.on('closed', () => {
+    gameBrowserWindow = null;
+  });
+
+  return gameBrowserWindow;
+}
+
+// Listener navigasi dari preload toolbar
+ipcMain.on('game-browser-nav', (_event, { action, url }) => {
+  if (!gameBrowserWindow || gameBrowserWindow.isDestroyed()) return;
+  if (action === 'back' && gameBrowserWindow.webContents.canGoBack()) {
+    gameBrowserWindow.webContents.goBack();
+  } else if (action === 'forward' && gameBrowserWindow.webContents.canGoForward()) {
+    gameBrowserWindow.webContents.goForward();
+  } else if (action === 'reload') {
+    gameBrowserWindow.webContents.reload();
+  } else if (action === 'navigate' && url) {
+    gameBrowserWindow.loadURL(url);
+  }
+});
+
+ipcMain.handle('open-game-browser', (_event, { url, title }) => {
+  openGameBrowserWindow(url, title);
+  return { success: true };
+});
 
 function createWindow() {
   const iconPath = path.join(__dirname, 'build', 'icon.ico');

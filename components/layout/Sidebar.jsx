@@ -29,8 +29,9 @@ const navGroups = [
   {
     label: 'Workspace & Log',
     items: [
-      { href: '/files', icon: Folder, label: 'File Manager' },
+      { href: '/download', icon: DownloadCloud, label: 'Download Hub' },
       { href: '/studio', icon: HardDrive, label: 'Upload Studio' },
+      { href: '/files', icon: Folder, label: 'File Manager' },
       { href: '/drive-status', icon: Cloud, label: 'Status Drive' },
       { href: '/log', icon: Clock, label: 'Log Transaksi' },
       { href: '/accounts', icon: Settings, label: 'Pengaturan Akun' },
