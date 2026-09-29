@@ -58,6 +58,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 dist/  
+dist-build/
 .claude/
 studio-state.json
 studio-config.json

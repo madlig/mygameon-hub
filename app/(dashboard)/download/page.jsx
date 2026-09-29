@@ -8,6 +8,7 @@ import {
   Package, FileCode, Check, Layers, ChevronRight, Sparkles, Terminal
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
+import PreInstalledWizardModal from '@/components/studio/PreInstalledWizardModal'
 
 export default function DownloadHubPage() {
   const [data, setData] = useState({
@@ -25,6 +26,7 @@ export default function DownloadHubPage() {
   const [handoffLoading, setHandoffLoading] = useState({}) // { [folderName]: boolean }
   const [handoffSuccess, setHandoffSuccess] = useState({}) // { [folderName]: true }
   const [notification, setNotification] = useState(null)
+  const [wizardFolder, setWizardFolder] = useState(null)
 
   // ── 1. Fetch Status Download ──
   const fetchStatus = useCallback(async (isSilent = false) => {
@@ -627,27 +629,55 @@ export default function DownloadHubPage() {
                       {/* Tombol Handoff Action */}
                       <div className="flex items-center gap-2 shrink-0">
                         {isTransferred ? (
-                          <Link
-                            href="/studio"
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all cursor-pointer shadow-sm"
-                          >
-                            <span>Lihat di Studio</span>
-                            <ArrowRight size={13} />
-                          </Link>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleHandoff(item.folderName, 'new')}
-                            disabled={isItemLoading}
-                            className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 px-4 py-2.5 text-xs font-black text-black hover:brightness-110 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-                          >
-                            {isItemLoading ? (
-                              <Loader2 size={13} className="animate-spin" />
-                            ) : (
-                              <Zap size={13} />
+                          <div className="flex items-center gap-2">
+                            {(item.packageType === 'ISO' || item.hasIso) && (
+                              <button
+                                type="button"
+                                onClick={() => setWizardFolder(item.folderName)}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-3.5 py-2 text-xs font-black text-black hover:brightness-110 shadow-md transition-all cursor-pointer"
+                              >
+                                <Play size={12} />
+                                <span>💿 Install ISO (+ Update)</span>
+                              </button>
                             )}
-                            <span>🚀 Oper ke Upload Studio</span>
-                          </button>
+                            <Link
+                              href="/studio"
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500 hover:text-black transition-all cursor-pointer shadow-sm"
+                            >
+                              <span>Lihat di Studio</span>
+                              <ArrowRight size={13} />
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {(item.packageType === 'ISO' || item.hasIso) && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await handleHandoff(item.folderName, 'new')
+                                  setWizardFolder(item.folderName)
+                                }}
+                                disabled={isItemLoading}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-3.5 py-2 text-xs font-black text-black hover:brightness-110 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                              >
+                                {isItemLoading ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+                                <span>💿 Install ISO</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleHandoff(item.folderName, 'new')}
+                              disabled={isItemLoading}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 px-4 py-2.5 text-xs font-black text-black hover:brightness-110 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+                            >
+                              {isItemLoading ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <Zap size={13} />
+                              )}
+                              <span>🚀 Oper ke Upload Studio</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -689,6 +719,22 @@ export default function DownloadHubPage() {
           </div>
         </div>
       )}
+
+      {/* ⚡ Asisten Game Pre-Installed Modal */}
+      <PreInstalledWizardModal
+        isOpen={!!wizardFolder}
+        folderName={wizardFolder}
+        onClose={() => setWizardFolder(null)}
+        onSuccess={() => {
+          fetchStatus(true)
+          setWizardFolder(null)
+          setNotification({
+            type: 'success',
+            text: 'Game berhasil dimatangkan ke format Pre-Installed! Siap diunggah.'
+          })
+          setTimeout(() => setNotification(null), 5000)
+        }}
+      />
     </div>
   )
 }

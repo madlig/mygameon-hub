@@ -1035,6 +1035,26 @@ export default function StudioPage() {
                           <span className="mt-1 flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-mono font-bold text-emerald-400 border border-emerald-500/20">
                             ✓ Siap Upload ({folder.archiveParts} Part)
                           </span>
+                        ) : folder.hasIso || folder.isInstallerPackage || (folder.name && (folder.name.toLowerCase().includes('elamigos') || folder.name.toLowerCase().includes('.iso'))) ? (
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                            <span className="flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-mono font-bold text-amber-400 border border-amber-500/30">
+                              💿 Berkas ISO Mentah
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedFolder(folder)
+                                setStageTab('inspector')
+                                setWizardFolder(folder.name)
+                              }}
+                              className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-amber-500 to-amber-400 px-2 py-0.5 text-[9px] font-black text-black hover:brightness-110 shadow-sm transition-all cursor-pointer"
+                              title="Luncurkan Asisten Instalasi ISO ke Pre-Installed"
+                            >
+                              <Play size={8} />
+                              <span>Install ISO</span>
+                            </button>
+                          </div>
                         ) : (
                           <span className="mt-0.5 text-[9px] text-[var(--text-4)]">📂 Folder Mentah (Butuh Arsip)</span>
                         )}
@@ -1224,27 +1244,30 @@ export default function StudioPage() {
                   </div>
 
                   {/* ⚡ Tombol Asisten Game Pre-Installed (Install & Update) */}
-                  <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-3 flex items-center justify-between gap-3 shadow-md">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
-                        <Zap size={16} />
+                  <div className="rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent p-3.5 flex items-center justify-between gap-3 shadow-lg">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
+                        <Zap size={20} />
                       </span>
                       <div className="min-w-0">
-                        <span className="font-bold text-xs text-white block truncate">
-                          Asisten Konversi Game Pre-Installed
+                        <span className="font-black text-xs text-amber-300 block truncate flex items-center gap-1.5">
+                          <span>💿 Install Game dari Berkas ISO (+ Pasang Update)</span>
+                          <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                            Plug & Play
+                          </span>
                         </span>
                         <span className="text-[10px] text-[var(--text-3)] block truncate">
-                          Install file ISO & update menjadi game matang (Plug & Play) sebelum diarsip
+                          Eksekusi installer ISO ke folder siap main, pasang patch update, lalu hapus ISO mentah secara otomatis.
                         </span>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => setWizardFolder(selectedFolder.name)}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-3 py-1.5 text-xs font-black text-black hover:from-amber-400 hover:to-amber-300 transition-all cursor-pointer shadow-md shrink-0"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2 text-xs font-black text-black hover:from-amber-400 hover:to-amber-300 transition-all cursor-pointer shadow-md shadow-amber-500/20 shrink-0"
                     >
                       <Play size={12} />
-                      <span>Jalankan Asisten</span>
+                      <span>🚀 Mulai Install ISO Sekarang</span>
                     </button>
                   </div>
 

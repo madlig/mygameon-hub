@@ -5,8 +5,11 @@ import {
   dismountIsoImage,
   launchGameSetup,
   getInstallerSession,
-  finalizePreInstalledGame
+  finalizePreInstalledGame,
+  runAutoInstallPipeline,
+  getPipelineSession
 } from '@/lib/gameInstaller'
+import { getDownloadConfig } from '@/lib/downloadWatcher'
 
 export async function POST(request) {
   try {
@@ -66,6 +69,23 @@ export async function POST(request) {
           cleanTitle
         })
         return NextResponse.json({ success: true, data: result })
+      }
+
+      case 'auto_pipeline': {
+        const { folderName } = body
+        if (!folderName) return NextResponse.json({ error: 'folderName diperlukan' }, { status: 400 })
+        const config = getDownloadConfig()
+        const uploadDir = config.uploadDir || 'D:\\Game\\Shopee\\GameUpload'
+        const pipeline = runAutoInstallPipeline({ uploadDir, folderName })
+        return NextResponse.json({ success: true, pipeline })
+      }
+
+      case 'pipeline_status': {
+        const { pipelineId } = body
+        if (!pipelineId) return NextResponse.json({ error: 'pipelineId diperlukan' }, { status: 400 })
+        const pipeline = getPipelineSession(pipelineId)
+        if (!pipeline) return NextResponse.json({ error: 'Pipeline tidak ditemukan' }, { status: 404 })
+        return NextResponse.json({ success: true, pipeline })
       }
 
       default:

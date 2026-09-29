@@ -58,8 +58,16 @@ function scanLocalDirectory(targetPath) {
         const escapedItem = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const itemRegex = new RegExp(`^${escapedItem}(\\.part\\d+)?\\.(rar|7z|zip|r\\d+)$`, 'i')
         let insideParts = []
+        let hasIso = false
+        let hasSetupExe = false
         try {
-          insideParts = fs.readdirSync(fullPath).filter((f) => itemRegex.test(f))
+          const filesInside = fs.readdirSync(fullPath)
+          insideParts = filesInside.filter((f) => itemRegex.test(f))
+          hasIso = filesInside.some((f) => f.toLowerCase().endsWith('.iso'))
+          hasSetupExe = filesInside.some((f) => {
+            const low = f.toLowerCase()
+            return low === 'setup.exe' || (low.startsWith('setup') && low.endsWith('.exe'))
+          })
         } catch (_) {}
 
         // Cek apakah ada part .rar di level parent yang cocok dengan nama folder ini
@@ -76,6 +84,9 @@ function scanLocalDirectory(targetPath) {
           isArchiveFile: false,
           hasArchive,
           archiveParts: partsCount,
+          hasIso,
+          hasSetupExe,
+          isInstallerPackage: hasIso || hasSetupExe,
           size: stats.size,
           mtime: stats.mtime
         })
