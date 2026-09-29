@@ -176,56 +176,69 @@ function killProcessOnPort(port) {
   }
 }
 
+let isAutoUpdaterInitialized = false;
+
 function setupAutoUpdater() {
   if (!app.isPackaged) return;
 
-  // Konfigurasi autoUpdater
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  if (!isAutoUpdaterInitialized) {
+    isAutoUpdaterInitialized = true;
+    autoUpdater.logger = console;
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version);
-    if (mainWindow) {
-      mainWindow.webContents.send('update_available', info);
-    }
-  });
+    autoUpdater.on('update-available', (info) => {
+      console.log('[updater] Update available:', info.version);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update_available', info);
+      }
+    });
 
-  autoUpdater.on('update-not-available', (info) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update_not_available', info);
-    }
-  });
+    autoUpdater.on('update-not-available', (info) => {
+      console.log('[updater] Update not available. Current version is latest:', info?.version);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update_not_available', info);
+      }
+    });
 
-  autoUpdater.on('download-progress', (progressObj) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update_progress', progressObj);
-    }
-  });
+    autoUpdater.on('download-progress', (progressObj) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update_progress', progressObj);
+      }
+    });
 
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version);
-    if (mainWindow) {
-      mainWindow.webContents.send('update_downloaded', info);
-    }
-  });
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log('[updater] Update downloaded:', info.version);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update_downloaded', info);
+      }
+    });
 
-  autoUpdater.on('error', (err) => {
-    console.error('AutoUpdater error:', err);
-    if (mainWindow) {
-      mainWindow.webContents.send('update_error', err.message);
-    }
-  });
+    autoUpdater.on('error', (err) => {
+      console.error('[updater] AutoUpdater error:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update_error', err.message);
+      }
+    });
+  }
 
   // Jalankan pengecekan
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+    console.error('[updater] checkForUpdates error:', err);
+  });
 }
 
 ipcMain.on('check-for-updates', () => {
   if (!app.isPackaged) {
-    if (mainWindow) mainWindow.webContents.send('update_not_available', { version: 'dev' });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update_not_available', { version: 'dev' });
+    }
     return;
   }
-  autoUpdater.checkForUpdates();
+  setupAutoUpdater();
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[updater] Manual check error:', err);
+  });
 });
 
 ipcMain.on('quit-and-install', () => {

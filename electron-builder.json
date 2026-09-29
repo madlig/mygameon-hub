@@ -45,6 +45,7 @@
   "publish": {
     "provider": "github",
     "owner": "madlig",
-    "repo": "mygameon-hub"
+    "repo": "mygameon-hub",
+    "releaseType": "release"
   }
 }

@@ -9,11 +9,12 @@ import {
   RefreshCw, Sparkles, Calendar, Layers, ExternalLink, Zap, ShieldCheck,
   Palette, Bot, ShoppingBag, ArrowRight, Telescope, Play, Pause, ListPlus,
   RotateCcw, XCircle, AlertTriangle, Terminal, Key, ShieldAlert,
-  Pencil, FolderPlus, Eraser, X, ChevronUp
+  Pencil, FolderPlus, Eraser, X, ChevronUp, Gamepad2
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import PreInstalledWizardModal from '@/components/studio/PreInstalledWizardModal'
+import CleanWorkbench from '@/components/studio/CleanWorkbench'
 import { cleanReleaseName } from '@/lib/utils'
 
 
@@ -54,7 +55,7 @@ function formatBytes(bytes) {
 
 export default function StudioPage() {
   // Navigation Tabs
-  const [activeTab, setActiveTab] = useState('console') // 'console' | 'planner' | 'history'
+  const [activeTab, setActiveTab] = useState('workbench') // 'workbench' | 'console' | 'planner' | 'history'
   const [stageTab, setStageTab] = useState('inspector') // 'inspector' | 'queue_monitor'
 
   // Loading & State
@@ -843,20 +844,31 @@ export default function StudioPage() {
 
   return (
     <div className="space-y-6">
-      <TopBar title="Upload Studio" backHref="/" />
+      <TopBar title="Meja Kerja Game" backHref="/" />
 
-      {/* 🧭 3-Tab Main Header Navigation */}
+      {/* 🧭 Main Header Navigation */}
       <div className="flex items-center justify-between border-b border-white/5 pb-3">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveTab('console')}
+            onClick={() => setActiveTab('workbench')}
             className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
-              activeTab === 'console'
+              activeTab === 'workbench'
                 ? 'bg-[var(--primary)] text-black shadow-[0_0_20px_rgba(255,209,0,0.3)]'
                 : 'text-[var(--text-3)] hover:bg-white/5 hover:text-[var(--text)]'
             }`}
           >
-            <HardDrive size={15} /> ⚡ Studio Console
+            <Gamepad2 size={15} /> 🛠️ Meja Kerja Game
+          </button>
+
+          <button
+            onClick={() => setActiveTab('console')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+              activeTab === 'console'
+                ? 'bg-amber-400 text-black shadow-[0_0_20px_rgba(251,191,36,0.3)]'
+                : 'text-[var(--text-3)] hover:bg-white/5 hover:text-[var(--text)]'
+            }`}
+          >
+            <HardDrive size={15} /> ⚡ Mode Antrean / Klasik
           </button>
 
           <button
@@ -888,6 +900,64 @@ export default function StudioPage() {
           <span>{isElectron ? 'Desktop Electron Mode' : 'Web Hub Mode'}</span>
         </div>
       </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════════
+          TAB 0: 🛠️ MEJA KERJA GAME (SINGLE CLEAN WORKBENCH)
+      ═════════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'workbench' && (
+        <div className="animate-in fade-in duration-200">
+          <CleanWorkbench
+            folders={data.folders}
+            selectedFolder={selectedFolder}
+            setSelectedFolder={(folder) => {
+              setSelectedFolder(folder)
+              if (!folder) return
+              const cleaned = cleanReleaseName(folder.name)
+              setCustomCatalogTitle(cleaned)
+
+              const rawLower = folder.name.toLowerCase()
+              const cleanLower = cleaned.toLowerCase()
+              const match = existingGames.find(
+                (g) => g.name.toLowerCase() === rawLower || g.name.toLowerCase() === cleanLower
+              )
+              if (match) {
+                setSelectedGame(match)
+                setUploadMode('update')
+                const primaryOwner = match.ownerEmail?.split(',')[0]?.trim()
+                const matchedWs = workspaces.find((w) => w.email === primaryOwner)
+                if (matchedWs) setTargetWorkspace(matchedWs)
+              } else {
+                setSelectedGame(null)
+                setUploadMode('new')
+              }
+            }}
+            stagingPath={data.path}
+            fetchScan={() => fetchScan(data.path)}
+            isScanning={loading}
+            workspaces={workspaces}
+            targetWorkspace={targetWorkspace}
+            setTargetWorkspace={setTargetWorkspace}
+            uploadMode={uploadMode}
+            setUploadMode={setUploadMode}
+            customCatalogTitle={customCatalogTitle}
+            setCustomCatalogTitle={setCustomCatalogTitle}
+            existingGames={existingGames}
+            selectedGame={selectedGame}
+            setSelectedGame={setSelectedGame}
+            processState={processState}
+            startProcessing={startProcessing}
+            handleProcessControl={handleProcessControl}
+            setWizardFolder={setWizardFolder}
+            setCreateFolderOpen={setCreateFolderOpen}
+            handleChangeStagingPath={handleChangeStagingPath}
+            handleDeleteAll={handleDeleteAll}
+            handleCleanParts={handleCleanParts}
+            rarConfig={rarConfig}
+            setRarConfig={setRarConfig}
+            onSwitchToClassic={() => setActiveTab('console')}
+          />
+        </div>
+      )}
 
       {/* ═════════════════════════════════════════════════════════════════════════
           TAB 1: ⚡ STUDIO CONSOLE (3-STEP PIPELINE WITH MULTI-UPLOAD QUEUE)

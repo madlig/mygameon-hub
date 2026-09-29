@@ -69,4 +69,61 @@ if (result.error) {
   process.exit(1);
 }
 
+if (result.status === 0 && commandArgs.includes('--publish')) {
+  console.log('\n\x1b[36m%s\x1b[0m', '🔍 Memverifikasi dan mempublikasikan rilis GitHub...');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+    const currentTag = 'v' + pkg.version;
+    const { execSync } = require('child_process');
+
+    // Ambil daftar rilis dari GitHub API
+    const rawReleases = execSync('gh api repos/madlig/mygameon-hub/releases', {
+      encoding: 'utf-8',
+      env: env,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    const releases = JSON.parse(rawReleases);
+    const targetReleases = releases.filter(r => r.tag_name === currentTag);
+
+    if (targetReleases.length > 0) {
+      // Cari rilis yang memiliki aset lengkap (.exe dan latest.yml)
+      const completeRelease = targetReleases.find(r => 
+        r.assets.some(a => a.name === 'latest.yml') && 
+        r.assets.some(a => a.name.endsWith('.exe'))
+      );
+
+      // Jika ada rilis hollow/kosong (tanpa latest.yml), hapus agar tidak membingungkan auto-updater
+      for (const r of targetReleases) {
+        if (completeRelease && r.id !== completeRelease.id) {
+          console.log(`Menghapus rilis duplikat/hollow (ID: ${r.id})...`);
+          try {
+            execSync(`gh api -X DELETE repos/madlig/mygameon-hub/releases/${r.id}`, { env, stdio: 'ignore' });
+          } catch (_) {}
+        }
+      }
+
+      const releaseToPublish = completeRelease || targetReleases[0];
+      if (releaseToPublish.draft) {
+        console.log(`Mengubah status rilis ${currentTag} (ID: ${releaseToPublish.id}) dari Draft menjadi Publik...`);
+        execSync(`gh api -X PATCH repos/madlig/mygameon-hub/releases/${releaseToPublish.id} -f draft=false`, {
+          env,
+          stdio: 'inherit'
+        });
+      }
+
+      // Verifikasi akhir endpoint releases/latest
+      const latestRaw = execSync('gh api repos/madlig/mygameon-hub/releases/latest', {
+        encoding: 'utf-8',
+        env,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      const latest = JSON.parse(latestRaw);
+      console.log('\x1b[32m%s\x1b[0m', `✅ Sukses! Rilis publik terbaru: ${latest.tag_name} (Draft: ${latest.draft})`);
+      console.log('Aset yang tersedia:', latest.assets.map(a => a.name).join(', '));
+    }
+  } catch (err) {
+    console.warn('⚠️ Peringatan saat finalisasi rilis GitHub:', err.message);
+  }
+}
+
 process.exit(result.status || 0);

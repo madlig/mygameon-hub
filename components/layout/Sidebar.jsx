@@ -14,6 +14,7 @@ const navGroups = [
     label: 'General Games',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard' },
+      { href: '/studio', icon: Gamepad2, label: 'Meja Kerja Game' },
       { href: '/scout', icon: Sparkles, label: 'Listing Studio' },
       { href: '/search', icon: Search, label: 'Cari Game' },
       { href: '/revoke', icon: Users, label: 'CRM Pelanggan' },
@@ -30,7 +31,6 @@ const navGroups = [
     label: 'Workspace & Log',
     items: [
       { href: '/download', icon: DownloadCloud, label: 'Download Hub' },
-      { href: '/studio', icon: HardDrive, label: 'Upload Studio' },
       { href: '/files', icon: Folder, label: 'File Manager' },
       { href: '/drive-status', icon: Cloud, label: 'Status Drive' },
       { href: '/log', icon: Clock, label: 'Log Transaksi' },
@@ -60,7 +60,8 @@ export default function Sidebar() {
         setUpdateStatus('downloading')
       })
       window.electronAPI.onUpdateNotAvailable(() => {
-        if (updateStatus === 'checking') setUpdateStatus(null)
+        setUpdateStatus('latest')
+        setTimeout(() => setUpdateStatus(null), 3500)
       })
       window.electronAPI.onUpdateProgress((info) => {
         if (info.percent) setUpdateProgress(Math.round(info.percent))
@@ -229,6 +230,11 @@ export default function Sidebar() {
                 <span className="text-[11px] font-bold text-blue-400 tracking-wide">
                   Unduh {updateProgress}%
                 </span>
+              </div>
+            ) : updateStatus === 'latest' ? (
+              <div className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[11px] font-bold text-emerald-400">
+                <CheckCircle2 size={13} />
+                <span>Aplikasi Versi Terbaru</span>
               </div>
             ) : updateStatus === 'error' ? (
               <button
