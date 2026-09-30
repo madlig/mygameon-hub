@@ -797,7 +797,7 @@ export default function StudioPage() {
   }
 
   const handleLaunchStudioForTask = (taskTitle) => {
-    setActiveTab('console')
+    setActiveTab('workbench')
     const match = data.folders.find((f) => f.name.toLowerCase().includes(taskTitle.toLowerCase()))
     if (match) {
       setSelectedFolder(match)
@@ -858,17 +858,6 @@ export default function StudioPage() {
             }`}
           >
             <Gamepad2 size={15} /> 🛠️ Meja Kerja Game
-          </button>
-
-          <button
-            onClick={() => setActiveTab('console')}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
-              activeTab === 'console'
-                ? 'bg-amber-400 text-black shadow-[0_0_20px_rgba(251,191,36,0.3)]'
-                : 'text-[var(--text-3)] hover:bg-white/5 hover:text-[var(--text)]'
-            }`}
-          >
-            <HardDrive size={15} /> ⚡ Mode Antrean / Klasik
           </button>
 
           <button
@@ -954,7 +943,17 @@ export default function StudioPage() {
             handleCleanParts={handleCleanParts}
             rarConfig={rarConfig}
             setRarConfig={setRarConfig}
-            onSwitchToClassic={() => setActiveTab('console')}
+            queue={queue}
+            isQueueRunning={isQueueRunning}
+            activeQueueId={activeQueueId}
+            addToQueue={addToQueue}
+            removeFromQueue={removeFromQueue}
+            startQueueRunner={startQueueRunner}
+            pauseQueueRunner={pauseQueueRunner}
+            clearCompletedQueue={clearCompletedQueue}
+            handleClearAllQueue={handleClearAllQueue}
+            retryQueueItem={retryQueueItem}
+            retryAllFailed={retryAllFailed}
           />
         </div>
       )}

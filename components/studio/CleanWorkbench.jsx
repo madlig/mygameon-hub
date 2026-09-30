@@ -3,9 +3,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   FolderOpen, Loader2, CheckCircle2, FileArchive, Trash2,
-  RefreshCw, Sparkles, Zap, Play, Pause, Copy, Check, ExternalLink,
+  RefreshCw, Sparkles, Zap, Play, Pause, ExternalLink,
   FolderPlus, Image as ImageIcon, Download, Search, AlertCircle,
-  HelpCircle, Eye, Settings, ArrowRight, ShieldCheck, Eraser
+  HelpCircle, Eye, Settings, ArrowRight, ShieldCheck, Eraser,
+  CloudUpload, ListPlus, ListOrdered, ChevronUp, ChevronDown, X,
+  RotateCcw, Clock
 } from 'lucide-react'
 import { cleanReleaseName } from '@/lib/utils'
 
@@ -44,16 +46,32 @@ export default function CleanWorkbench({
   handleCleanParts,
   rarConfig,
   setRarConfig,
-  onSwitchToClassic
+  queue = [],
+  isQueueRunning = false,
+  activeQueueId = null,
+  addToQueue,
+  removeFromQueue,
+  startQueueRunner,
+  pauseQueueRunner,
+  clearCompletedQueue,
+  handleClearAllQueue,
+  retryQueueItem,
+  retryAllFailed,
 }) {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState('all') // 'all' | 'iso' | 'raw' | 'archive'
-
-  // Shopee Listing State
-  const [shopeeData, setShopeeData] = useState({ status: 'idle', data: null, error: null })
-  const [shopeeCopied, setShopeeCopied] = useState({ title: false, desc: false })
   const [showWebSources, setShowWebSources] = useState(false)
+
+  // Queue Drawer State & Computed Metrics
+  const [isQueueDrawerOpen, setIsQueueDrawerOpen] = useState(false)
+  const waitingQueueItems = useMemo(() => (queue || []).filter((q) => q.status === 'waiting'), [queue])
+  const completedQueueItems = useMemo(() => (queue || []).filter((q) => q.status === 'success'), [queue])
+  const failedQueueItems = useMemo(() => (queue || []).filter((q) => q.status === 'error'), [queue])
+  const activeQueueItem = useMemo(
+    () => (queue || []).find((q) => q.id === activeQueueId || q.status === 'processing'),
+    [queue, activeQueueId]
+  )
 
   // Otomatis pilih akun Google Drive pertama jika belum dipilih
   useEffect(() => {
@@ -88,50 +106,6 @@ export default function CleanWorkbench({
     return { all, iso, raw, archive }
   }, [folders])
 
-  // Otomatis tarik data Shopee saat folder dipilih
-  useEffect(() => {
-    if (!selectedFolder) {
-      setShopeeData({ status: 'idle', data: null, error: null })
-      return
-    }
-
-    const cleanTitle = cleanReleaseName(selectedFolder.name)
-    if (!cleanTitle) return
-
-    setShopeeData({ status: 'loading', data: null, error: null })
-
-    fetch(`/api/listing/search?query=${encodeURIComponent(cleanTitle)}`)
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data) {
-          setShopeeData({ status: 'success', data: json.data, error: null })
-        } else {
-          setShopeeData({ status: 'not_found', data: null, error: json.error || 'Data game tidak ditemukan di Steam' })
-        }
-      })
-      .catch((err) => {
-        setShopeeData({ status: 'error', data: null, error: err.message })
-      })
-  }, [selectedFolder?.name])
-
-  // Salin Judul Shopee
-  const copyTitle = () => {
-    if (shopeeData.data?.seoTitle) {
-      navigator.clipboard.writeText(shopeeData.data.seoTitle)
-      setShopeeCopied((prev) => ({ ...prev, title: true }))
-      setTimeout(() => setShopeeCopied((prev) => ({ ...prev, title: false })), 2000)
-    }
-  }
-
-  // Salin Deskripsi & Spek PC Shopee
-  const copyDesc = () => {
-    if (shopeeData.data?.description) {
-      navigator.clipboard.writeText(shopeeData.data.description)
-      setShopeeCopied((prev) => ({ ...prev, desc: true }))
-      setTimeout(() => setShopeeCopied((prev) => ({ ...prev, desc: false })), 2000)
-    }
-  }
-
   // Buka Game Browser Aman
   const openWeb = (url, title) => {
     setShowWebSources(false)
@@ -150,9 +124,9 @@ export default function CleanWorkbench({
       {/* ── TOP UTILITY BAR (BERSIH & TENANG) ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-white/10">
         <div>
-          <span className="text-xs font-bold text-white block">Pusat Alur Kerja Game Lokal ke Cloud & Shopee</span>
+          <span className="text-xs font-bold text-white block">Pusat Alur Kerja Game Lokal ke Cloud Drive</span>
           <p className="text-[11px] text-[var(--text-3)] mt-0.5">
-            Pasang installer ISO, pecah WinRAR part, kirim ke Google Drive, dan salin materi etalase Shopee dalam 1 meja kerja.
+            Pasang installer ISO, pecah WinRAR part, dan kirim ke Google Drive dalam 1 meja kerja bersih.
           </p>
         </div>
 
@@ -226,21 +200,11 @@ export default function CleanWorkbench({
             <RefreshCw size={13} className={isScanning ? 'animate-spin' : ''} />
             <span>Muat Ulang</span>
           </button>
-
-          {onSwitchToClassic && (
-            <button
-              type="button"
-              onClick={onSwitchToClassic}
-              className="text-[11px] font-mono text-[var(--text-4)] hover:text-amber-400 underline ml-1 cursor-pointer transition-colors"
-            >
-              Mode Antrean / Klasik
-            </button>
-          )}
         </div>
       </div>
 
       {/* ── 2-COLUMN MAIN LAYOUT ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      <div className={`grid grid-cols-1 lg:grid-cols-12 gap-5 ${queue && queue.length > 0 ? 'pb-24' : ''}`}>
         
         {/* ── KOLOM KIRI: DAFTAR GAME DI PC (5 COLS) ── */}
         <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-[var(--surface)] p-4 space-y-3 shadow-lg flex flex-col h-[calc(100vh-175px)]">
@@ -328,6 +292,9 @@ export default function CleanWorkbench({
                 const isSelected = selectedFolder?.name === f.name
                 const hasIso = f.hasIso || f.isInstallerPackage
                 const hasArchive = f.hasArchive
+                const queuedItem = (queue || []).find(
+                  (q) => q.folder?.path === f.path || q.folder?.name === f.name
+                )
 
                 return (
                   <div
@@ -363,7 +330,7 @@ export default function CleanWorkbench({
                         {cleanReleaseName(f.name) || f.name}
                       </p>
                       
-                      <div className="flex items-center gap-2 text-[10px] font-mono">
+                      <div className="flex items-center gap-2 text-[10px] font-mono flex-wrap">
                         {hasIso ? (
                           <span className="text-amber-400 flex items-center gap-1">
                             <span>💿 Masih ISO</span>
@@ -379,6 +346,32 @@ export default function CleanWorkbench({
                         )}
                         <span className="text-[var(--text-4)]">•</span>
                         <span className="text-[var(--text-4)]">{f.formattedSize || formatBytes(f.size)}</span>
+
+                        {queuedItem && (
+                          <>
+                            <span className="text-[var(--text-4)]">•</span>
+                            {queuedItem.status === 'processing' ? (
+                              <span className="text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold animate-pulse flex items-center gap-1">
+                                <Loader2 size={10} className="animate-spin" />
+                                <span>Sedang Upload</span>
+                              </span>
+                            ) : queuedItem.status === 'success' ? (
+                              <span className="text-emerald-400 bg-emerald-500/20 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-1">
+                                <CheckCircle2 size={10} />
+                                <span>✓ Selesai</span>
+                              </span>
+                            ) : queuedItem.status === 'error' ? (
+                              <span className="text-red-400 bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded font-bold">
+                                ✕ Gagal
+                              </span>
+                            ) : (
+                              <span className="text-blue-300 bg-blue-500/20 border border-blue-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-1">
+                                <Clock size={10} />
+                                <span>Antrean</span>
+                              </span>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -648,15 +641,30 @@ export default function CleanWorkbench({
                         )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => startProcessing('upload')}
-                        disabled={isProcessing || (uploadMode === 'update' && !selectedGame)}
-                        className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 px-4 py-2.5 text-xs font-black text-black hover:brightness-110 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        <CheckCircle2 size={14} />
-                        <span>Upload ke Google Drive Sekarang</span>
-                      </button>
+                      <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => startProcessing('upload')}
+                          disabled={isProcessing || (uploadMode === 'update' && !selectedGame)}
+                          className="flex-1 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 px-4 py-2.5 text-xs font-black text-black hover:brightness-110 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+                        >
+                          <CloudUpload size={14} />
+                          <span>Upload ke Drive Sekarang</span>
+                        </button>
+
+                        {addToQueue && (
+                          <button
+                            type="button"
+                            onClick={addToQueue}
+                            disabled={isProcessing || (uploadMode === 'update' && !selectedGame)}
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 px-4 py-2.5 text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                            title="Masukkan game ini ke antrean upload otomatis berurutan"
+                          >
+                            <ListPlus size={14} />
+                            <span>+ Masukkan Antrean</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     /* KONDISI B: FOLDER SIAP -> PERLU PECAH WINRAR */
@@ -696,112 +704,229 @@ export default function CleanWorkbench({
 
               </div>
 
-              {/* 2. KARTU MATERI SHOPEE (TINGGAL SALIN) */}
-              <div className="rounded-2xl border border-white/10 bg-[var(--surface)] p-5 space-y-4 shadow-xl">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black uppercase tracking-wider text-white">
-                      Materi Listing Shopee
-                    </span>
-                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      Tinggal Salin
-                    </span>
-                  </div>
-                  {shopeeData.status === 'loading' && (
-                    <span className="text-[10px] font-mono text-amber-300 flex items-center gap-1">
-                      <Loader2 size={11} className="animate-spin" />
-                      <span>Mengambil data Steam...</span>
-                    </span>
-                  )}
-                </div>
-
-                {shopeeData.status === 'loading' ? (
-                  <div className="py-8 text-center text-[var(--text-4)] text-xs">
-                    Sedang mencari spesifikasi & judul Shopee dari Steam API...
-                  </div>
-                ) : shopeeData.status === 'success' && shopeeData.data ? (
-                  <div className="space-y-3.5">
-                    {/* Judul Shopee */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-bold text-[var(--text-4)] uppercase tracking-wider">
-                          Judul Produk Shopee:
-                        </label>
-                        <button
-                          type="button"
-                          onClick={copyTitle}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 hover:text-white transition-colors cursor-pointer"
-                        >
-                          {shopeeCopied.title ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                          <span>{shopeeCopied.title ? 'Tersalin!' : 'Salin Judul'}</span>
-                        </button>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-black/40 p-2.5 text-xs font-semibold text-white break-words select-all">
-                        {shopeeData.data.seoTitle}
-                      </div>
-                    </div>
-
-                    {/* Deskripsi & Spesifikasi PC */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-bold text-[var(--text-4)] uppercase tracking-wider">
-                          Deskripsi & Spesifikasi PC:
-                        </label>
-                        <button
-                          type="button"
-                          onClick={copyDesc}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 hover:text-white transition-colors cursor-pointer"
-                        >
-                          {shopeeCopied.desc ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                          <span>{shopeeCopied.desc ? 'Tersalin!' : 'Salin Deskripsi'}</span>
-                        </button>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-black/40 p-3 text-[11px] font-mono text-[var(--text-2)] max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed select-all scrollbar-thin">
-                        {shopeeData.data.description}
-                      </div>
-                    </div>
-
-                    {/* Gambar Cover Shopee */}
-                    {shopeeData.data.coverUrl && (
-                      <div className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-black/30">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={shopeeData.data.coverUrl}
-                            alt="Cover"
-                            className="h-12 w-20 object-cover rounded-lg border border-white/10"
-                          />
-                          <div>
-                            <span className="text-xs font-bold text-white block">Gambar Poster Resmi</span>
-                            <span className="text-[10px] text-[var(--text-4)]">Steam Official Artwork</span>
-                          </div>
-                        </div>
-                        <a
-                          href={shopeeData.data.coverUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors"
-                        >
-                          <ExternalLink size={12} />
-                          <span>Buka Gambar</span>
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-white/5 bg-black/20 p-4 text-xs text-[var(--text-4)] space-y-1">
-                    <p className="font-semibold text-white">Materi Shopee Otomatis</p>
-                    <p className="text-[11px]">
-                      {shopeeData.error || 'Data spesifikasi akan muncul otomatis saat game resmi ditemukan di Steam.'}
-                    </p>
-                  </div>
-                )}
-              </div>
-
             </div>
           )}
         </div>
 
       </div>
+
+      {/* ── FLOATING SEQUENTIAL QUEUE DRAWER (HANYA MUNCUL JIKA ADA ANTREAN) ── */}
+      {queue && queue.length > 0 && (
+        <div className="fixed bottom-4 left-4 right-4 md:left-64 md:right-8 z-40 space-y-2 pointer-events-none">
+          {/* Expanded Queue Drawer */}
+          {isQueueDrawerOpen && (
+            <div className="pointer-events-auto bg-zinc-950/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl p-4 max-h-[380px] overflow-y-auto space-y-3 animate-in slide-in-from-bottom-3 duration-200">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <ListOrdered size={16} className="text-amber-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    Daftar Antrean Sekuensial ({queue.length} Game)
+                  </span>
+                  <span className="text-[10px] text-[var(--text-4)]">
+                    • Diproses satu per satu otomatis
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {completedQueueItems.length > 0 && clearCompletedQueue && (
+                    <button
+                      type="button"
+                      onClick={clearCompletedQueue}
+                      className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 hover:underline cursor-pointer"
+                    >
+                      Bersihkan Selesai ({completedQueueItems.length})
+                    </button>
+                  )}
+                  {failedQueueItems.length > 0 && retryAllFailed && (
+                    <button
+                      type="button"
+                      onClick={retryAllFailed}
+                      className="text-[10px] font-bold text-amber-400 hover:text-amber-300 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <RotateCcw size={10} /> Coba Ulang Gagal ({failedQueueItems.length})
+                    </button>
+                  )}
+                  {handleClearAllQueue && (
+                    <button
+                      type="button"
+                      onClick={handleClearAllQueue}
+                      className="text-[10px] font-bold text-red-400 hover:text-red-300 hover:underline cursor-pointer"
+                    >
+                      Kosongkan Semua
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsQueueDrawerOpen(false)}
+                    className="p-1 rounded-lg text-[var(--text-4)] hover:text-white hover:bg-white/10 cursor-pointer ml-1"
+                    title="Tutup daftar"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="space-y-2">
+                {queue.map((item, idx) => {
+                  const isItemActive = activeQueueItem?.id === item.id
+                  return (
+                    <div
+                      key={item.id || idx}
+                      className={`flex items-center justify-between p-3 rounded-xl border text-xs transition-all ${
+                        isItemActive
+                          ? 'border-amber-400/50 bg-amber-500/10'
+                          : item.status === 'success'
+                          ? 'border-emerald-500/20 bg-emerald-500/5'
+                          : item.status === 'error'
+                          ? 'border-red-500/20 bg-red-500/5'
+                          : 'border-white/5 bg-black/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 pr-3">
+                        <span className="text-[10px] font-mono font-bold text-[var(--text-4)] shrink-0 w-5">
+                          #{idx + 1}
+                        </span>
+                        <div className="space-y-0.5 min-w-0">
+                          <p className="font-bold text-white truncate max-w-sm">
+                            {item.customTitle || item.folder?.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-[10px] text-[var(--text-4)] font-mono">
+                            <span>{item.workspace?.email || 'Drive'}</span>
+                            <span>•</span>
+                            <span>{item.mode === 'update' ? 'Update Versi' : 'Game Baru'}</span>
+                            {item.folder?.formattedSize && (
+                              <>
+                                <span>•</span>
+                                <span>{item.folder.formattedSize}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        {/* Status Label */}
+                        {item.status === 'processing' || isItemActive ? (
+                          <div className="flex items-center gap-2 text-amber-300 font-bold text-[11px]">
+                            <Loader2 size={13} className="animate-spin" />
+                            <span>{item.progress || processState.progress || 0}% Upload</span>
+                          </div>
+                        ) : item.status === 'success' ? (
+                          <span className="flex items-center gap-1 text-emerald-400 font-bold text-[11px]">
+                            <CheckCircle2 size={13} />
+                            <span>Selesai</span>
+                          </span>
+                        ) : item.status === 'error' ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-red-400 font-bold text-[11px] truncate max-w-[140px]" title={item.text}>
+                              Gagal
+                            </span>
+                            {retryQueueItem && (
+                              <button
+                                type="button"
+                                onClick={() => retryQueueItem(item.id)}
+                                className="p-1 rounded bg-white/10 hover:bg-white/20 text-amber-300 text-[10px] cursor-pointer"
+                                title="Coba ulang item ini"
+                              >
+                                <RotateCcw size={11} />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[var(--text-4)] text-[11px]">
+                            <Clock size={12} />
+                            <span>Menunggu</span>
+                          </span>
+                        )}
+
+                        {/* Remove button (if not processing) */}
+                        {!isItemActive && removeFromQueue && (
+                          <button
+                            type="button"
+                            onClick={() => removeFromQueue(item.id)}
+                            className="p-1.5 rounded-lg text-[var(--text-4)] hover:text-red-400 hover:bg-white/5 cursor-pointer transition-colors"
+                            title="Hapus dari antrean"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Slim Floating Bar */}
+          <div className="pointer-events-auto bg-zinc-950/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl px-4 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`p-2 rounded-xl border shrink-0 ${
+                isQueueRunning
+                  ? 'border-amber-400/40 bg-amber-500/10 text-amber-400 animate-pulse'
+                  : 'border-white/10 bg-white/5 text-[var(--text-3)]'
+              }`}>
+                <ListOrdered size={16} />
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-white">
+                    Antrean: {queue.length} Game
+                  </span>
+                  <span className="text-[10px] font-mono text-[var(--text-4)]">
+                    ({waitingQueueItems.length} Menunggu • {completedQueueItems.length} Selesai{failedQueueItems.length > 0 ? ` • ${failedQueueItems.length} Gagal` : ''})
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-3)] truncate mt-0.5">
+                  {isQueueRunning && activeQueueItem ? (
+                    <span className="text-amber-300 font-semibold flex items-center gap-1.5">
+                      <Loader2 size={11} className="animate-spin inline shrink-0" />
+                      <span>Sedang Upload: {activeQueueItem.customTitle || activeQueueItem.folder?.name} ({activeQueueItem.progress || processState.progress || 0}%)</span>
+                    </span>
+                  ) : waitingQueueItems.length > 0 ? (
+                    <span>Siap dijalankan berurutan (bisa ditinggal tidur/aktivitas lain)</span>
+                  ) : (
+                    <span>Semua game dalam antrean telah selesai diproses.</span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsQueueDrawerOpen(!isQueueDrawerOpen)}
+                className="px-2.5 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-[var(--text-2)] hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                <span>{isQueueDrawerOpen ? 'Tutup Daftar' : 'Lihat Daftar'}</span>
+                {isQueueDrawerOpen ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+              </button>
+
+              {isQueueRunning ? (
+                <button
+                  type="button"
+                  onClick={pauseQueueRunner}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-500/20"
+                >
+                  <Pause size={13} />
+                  <span>Jeda Antrean</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startQueueRunner}
+                  disabled={waitingQueueItems.length === 0}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:brightness-110 text-black text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-md shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Play size={13} />
+                  <span>Jalankan Antrean</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
