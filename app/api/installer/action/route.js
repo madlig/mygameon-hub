@@ -41,11 +41,11 @@ export async function POST(request) {
       }
 
       case 'launch_setup': {
-        const { exePath, targetDir, silent = false, sessionId } = body
+        const { exePath, targetDir, silent = false, sessionId, userName } = body
         if (!exePath || !targetDir) {
           return NextResponse.json({ error: 'exePath dan targetDir diperlukan' }, { status: 400 })
         }
-        const sessionData = launchGameSetup({ exePath, targetDir, silent, sessionId })
+        const sessionData = launchGameSetup({ exePath, targetDir, silent, sessionId, userName: userName || 'mygameon' })
         return NextResponse.json({ success: true, session: sessionData })
       }
 
@@ -57,7 +57,7 @@ export async function POST(request) {
       }
 
       case 'finalize': {
-        const { targetDir, rawBaseFolder, rawUpdateFolder, isoPath, cleanTitle } = body
+        const { targetDir, rawBaseFolder, rawUpdateFolder, isoPath, cleanTitle, userName } = body
         if (!targetDir || !cleanTitle) {
           return NextResponse.json({ error: 'targetDir dan cleanTitle diperlukan' }, { status: 400 })
         }
@@ -66,17 +66,23 @@ export async function POST(request) {
           rawBaseFolder,
           rawUpdateFolder,
           isoPath,
-          cleanTitle
+          cleanTitle,
+          userName: userName || 'mygameon'
         })
         return NextResponse.json({ success: true, data: result })
       }
 
       case 'auto_pipeline': {
-        const { folderName } = body
+        const { folderName, targetDir, userName } = body
         if (!folderName) return NextResponse.json({ error: 'folderName diperlukan' }, { status: 400 })
         const config = getDownloadConfig()
         const uploadDir = config.uploadDir || 'D:\\Game\\Shopee\\GameUpload'
-        const pipeline = runAutoInstallPipeline({ uploadDir, folderName })
+        const pipeline = runAutoInstallPipeline({
+          uploadDir,
+          folderName,
+          customTargetDir: targetDir,
+          userName: userName || 'mygameon'
+        })
         return NextResponse.json({ success: true, pipeline })
       }
 

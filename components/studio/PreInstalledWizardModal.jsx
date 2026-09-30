@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   Sparkles, CheckCircle2, AlertTriangle, Loader2, Play,
   HardDrive, ShieldCheck, Zap, FolderOpen, Trash2, ArrowRight,
-  X, Check, Disc, RefreshCw, FileCheck, Copy
+  X, Check, Disc, RefreshCw, FileCheck, Copy, User, Settings2
 } from 'lucide-react'
 
 export default function PreInstalledWizardModal({
@@ -22,6 +22,8 @@ export default function PreInstalledWizardModal({
   const [statusText, setStatusText] = useState('')
   const [activeSession, setActiveSession] = useState(null)
   const [customTitle, setCustomTitle] = useState('')
+  const [targetPathInput, setTargetPathInput] = useState('')
+  const [userNameInput, setUserNameInput] = useState('mygameon')
   const [isMounting, setIsMounting] = useState(false)
   const [mountedDrive, setMountedDrive] = useState(null)
   const [copied, setCopied] = useState(false)
@@ -49,6 +51,7 @@ export default function PreInstalledWizardModal({
         if (json.success && json.data) {
           setSetupInfo(json.data)
           setCustomTitle(json.data.cleanTitle || folderName)
+          setTargetPathInput(json.data.suggestedTargetPath || '')
         } else {
           setError(json.error || 'Gagal mendeteksi berkas installer')
         }
@@ -118,8 +121,9 @@ export default function PreInstalledWizardModal({
   if (!isOpen) return null
 
   function handleCopyPath() {
-    if (setupInfo?.suggestedTargetPath) {
-      navigator.clipboard.writeText(setupInfo.suggestedTargetPath)
+    const val = targetPathInput || setupInfo?.suggestedTargetPath
+    if (val) {
+      navigator.clipboard.writeText(val)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }
@@ -135,7 +139,12 @@ export default function PreInstalledWizardModal({
       const res = await fetch('/api/installer/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto_pipeline', folderName })
+        body: JSON.stringify({
+          action: 'auto_pipeline',
+          folderName,
+          targetDir: targetPathInput.trim() || setupInfo?.suggestedTargetPath,
+          userName: userNameInput.trim() || 'mygameon'
+        })
       })
       const json = await res.json()
       if (!json.success || !json.pipeline) {
@@ -181,13 +190,15 @@ export default function PreInstalledWizardModal({
       setStatusText(`Membuka setup.exe dari Drive ${driveLetter || 'Lokal'}...`)
 
       // Luncurkan installer
+      const effectiveTarget = targetPathInput.trim() || setupInfo.suggestedTargetPath
       const launchRes = await fetch('/api/installer/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'launch_setup',
           exePath: exeToRun,
-          targetDir: setupInfo.suggestedTargetPath
+          targetDir: effectiveTarget,
+          userName: userNameInput.trim() || 'mygameon'
         })
       })
       const launchJson = await launchRes.json()
@@ -209,13 +220,15 @@ export default function PreInstalledWizardModal({
     setStatusText('Membuka file Update Patch...')
 
     try {
+      const effectiveTarget = targetPathInput.trim() || setupInfo.suggestedTargetPath
       const launchRes = await fetch('/api/installer/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'launch_setup',
           exePath: setupInfo.updateExePath,
-          targetDir: setupInfo.suggestedTargetPath
+          targetDir: effectiveTarget,
+          userName: userNameInput.trim() || 'mygameon'
         })
       })
       const launchJson = await launchRes.json()
@@ -236,18 +249,22 @@ export default function PreInstalledWizardModal({
     setStatusText('Membersihkan ISO mentah, menghapus folder installer, dan menyuntikkan branding MyGameON...')
 
     try {
+      const effectiveTarget = targetPathInput.trim() || setupInfo.suggestedTargetPath
+      const effTitle = customTitle.trim() || effectiveTarget.split(/[\\/]/).filter(Boolean).pop() || folderName
+
       const res = await fetch('/api/installer/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'finalize',
-          targetDir: setupInfo.suggestedTargetPath,
+          targetDir: effectiveTarget,
           rawBaseFolder: setupInfo.fullPath,
           rawUpdateFolder: setupInfo.updateFolder
             ? `${setupInfo.fullPath.substring(0, setupInfo.fullPath.lastIndexOf('\\'))}\\${setupInfo.updateFolder}`
             : null,
           isoPath: setupInfo.isoPath,
-          cleanTitle: customTitle
+          cleanTitle: effTitle,
+          userName: userNameInput.trim() || 'mygameon'
         })
       })
 
@@ -384,24 +401,85 @@ export default function PreInstalledWizardModal({
             </div>
 
             {/* Target Folder Penginstalan Bersih */}
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-1.5 text-xs">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3.5 space-y-2 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase text-[var(--text-4)] font-bold flex items-center gap-1">
-                  <FolderOpen size={12} className="text-amber-400" />
-                  <span>Target Folder Game Matang:</span>
+                <span className="text-[10px] font-mono uppercase text-[var(--text-4)] font-bold flex items-center gap-1.5">
+                  <FolderOpen size={13} className="text-amber-400" />
+                  <span>Lokasi Folder Install (Game Matang):</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={handleCopyPath}
-                  className="text-[10px] font-mono text-amber-300 hover:text-white flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 transition-colors cursor-pointer"
-                  title="Salin path folder untuk ditempel ke jendela installer jika diperlukan"
-                >
-                  {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span>{copied ? 'Tersalin ke Clipboard!' : 'Salin Path Folder'}</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {setupInfo?.suggestedTargetPath && targetPathInput !== setupInfo.suggestedTargetPath && (
+                    <button
+                      type="button"
+                      onClick={() => setTargetPathInput(setupInfo.suggestedTargetPath)}
+                      className="text-[10px] font-mono text-[var(--text-3)] hover:text-white flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded border border-white/10 transition-colors cursor-pointer"
+                      title="Kembalikan ke saran path default"
+                    >
+                      <RefreshCw size={10} />
+                      <span>Reset Saran</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCopyPath}
+                    className="text-[10px] font-mono text-amber-300 hover:text-white flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 transition-colors cursor-pointer"
+                    title="Salin path folder untuk ditempel ke jendela installer jika diperlukan"
+                  >
+                    {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                    <span>{copied ? 'Tersalin!' : 'Salin Path'}</span>
+                  </button>
+                </div>
               </div>
-              <div className="font-mono text-white text-xs bg-black/40 p-2 rounded-lg border border-white/5 break-all select-all">
-                {setupInfo.suggestedTargetPath}
+              <input
+                type="text"
+                value={targetPathInput}
+                onChange={(e) => setTargetPathInput(e.target.value)}
+                disabled={pipelineSession?.status === 'running'}
+                placeholder="Contoh: D:\Game\Shopee\GameUpload\Control Resonant"
+                className="w-full font-mono text-xs text-white bg-black/50 px-3 py-2 rounded-lg border border-white/10 focus:border-amber-400 focus:outline-none transition-all disabled:opacity-50"
+              />
+              <p className="text-[10px] text-[var(--text-4)] leading-relaxed">
+                Folder tujuan instalasi hasil ekstrak bersih (bebas embel-embel scene group). Anda dapat mengubah nama folder game sesuai keinginan sebelum instalasi dimulai.
+              </p>
+            </div>
+
+            {/* Parameter & Pengaturan Otomatisasi Terpasang */}
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-2 text-xs">
+              <span className="text-[10px] font-mono uppercase text-[var(--text-4)] font-bold flex items-center gap-1.5">
+                <Settings2 size={13} className="text-amber-400" />
+                <span>Parameter &amp; Pengaturan Otomatisasi (Standar Pre-Installed):</span>
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 flex items-center gap-2">
+                  <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                  <div>
+                    <span className="font-bold text-emerald-300 block">Start Menu Folder</span>
+                    <span className="text-[10px] text-[var(--text-4)]">Don&apos;t Create (/NOICONS)</span>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2.5 flex items-center gap-2">
+                  <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
+                  <div>
+                    <span className="font-bold text-emerald-300 block">Desktop Icon</span>
+                    <span className="text-[10px] text-[var(--text-4)]">Jangan Buat Shortcut</span>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-2.5 flex items-center gap-2">
+                  <User size={15} className="text-amber-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-bold text-amber-300 block">Player UserName</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <input
+                        type="text"
+                        value={userNameInput}
+                        onChange={(e) => setUserNameInput(e.target.value)}
+                        disabled={pipelineSession?.status === 'running'}
+                        className="w-full bg-black/60 border border-white/15 rounded px-1.5 py-0.5 text-[10px] font-mono text-white focus:outline-none focus:border-amber-400"
+                        title="Username yang otomatis disuntikkan ke emulator crack (Steam, Goldberg, Rune, Codex, dll)"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -419,11 +497,12 @@ export default function PreInstalledWizardModal({
                       <h4 className="font-black text-sm text-white">Instalasi Otomatis Sukses 100%!</h4>
                       <p className="text-xs text-[var(--text-3)] mt-1">
                         Game telah matang ke format Plug & Play di: <br />
-                        <span className="font-mono text-emerald-300 font-bold break-all">{setupInfo.suggestedTargetPath}</span>
+                        <span className="font-mono text-emerald-300 font-bold break-all">{targetPathInput || setupInfo.suggestedTargetPath}</span>
                       </p>
                       <p className="text-[11px] text-amber-300/90 mt-1.5">
-                        ✓ Berkas ISO mentah & installer sementara telah dihapus (disk PC bertambah lega).<br />
-                        ✓ Dokumen branding & panduan resmi MyGameON telah disematkan.
+                        ✓ Berkas ISO mentah &amp; installer sementara telah dihapus (disk PC bertambah lega).<br />
+                        ✓ Dokumen branding &amp; panduan resmi MyGameON telah disematkan.<br />
+                        ✓ UserName pemain &quot;{userNameInput}&quot; telah dikonfigurasi ke seluruh emulator crack.
                       </p>
                     </div>
                   </div>
