@@ -6,8 +6,9 @@ import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import {
   Search, Settings, Clock, Users, Gamepad2, Grid2X2,
-  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud, Telescope, DownloadCloud, RefreshCw, Folder
+  KeyRound, Sparkles, HardDrive, CheckCircle2, AlertCircle, Loader2, Cloud, Telescope, DownloadCloud, RefreshCw, Folder, Smartphone
 } from 'lucide-react'
+import MobileConnectModal from './MobileConnectModal'
 
 const navGroups = [
   {
@@ -49,6 +50,7 @@ export default function Sidebar() {
   const [updateStatus, setUpdateStatus] = useState(null) // 'checking', 'downloading', 'ready', 'error'
   const [updateProgress, setUpdateProgress] = useState(0)
   const [appVersion, setAppVersion] = useState('')
+  const [connectModalOpen, setConnectModalOpen] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
@@ -267,7 +269,21 @@ export default function Sidebar() {
             )}
           </div>
         )}
+
+        {/* Akses Mobile / Hubungkan HP Button */}
+        <button
+          type="button"
+          onClick={() => setConnectModalOpen(true)}
+          className="w-full mt-3 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-300 hover:bg-amber-500/20 transition-all cursor-pointer shadow-sm"
+          title="Buka QR Code & Alamat IP untuk HP"
+        >
+          <Smartphone size={14} className="text-amber-400" />
+          <span>Hubungkan HP / Akses Mobile</span>
+        </button>
       </div>
+
+      {/* Mobile Connect QR Modal */}
+      <MobileConnectModal isOpen={connectModalOpen} onClose={() => setConnectModalOpen(false)} />
     </aside>
   )
 }

@@ -207,7 +207,7 @@ export default function CleanWorkbench({
       <div className={`grid grid-cols-1 lg:grid-cols-12 gap-5 ${queue && queue.length > 0 ? 'pb-24' : ''}`}>
         
         {/* ── KOLOM KIRI: DAFTAR GAME DI PC (5 COLS) ── */}
-        <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-[var(--surface)] p-4 space-y-3 shadow-lg flex flex-col h-[calc(100vh-175px)]">
+        <div className="lg:col-span-5 rounded-2xl border border-white/10 bg-[var(--surface)] p-4 space-y-3 shadow-lg flex flex-col h-[380px] sm:h-[450px] lg:h-[calc(100vh-175px)]">
           <div className="flex items-center justify-between">
             <span className="text-xs font-black uppercase tracking-wider text-white">
               Daftar Game di PC ({folders.length})

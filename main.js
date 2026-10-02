@@ -441,7 +441,7 @@ function createWindow() {
         ELECTRON_RUN_AS_NODE: '1',
         NODE_ENV: 'production',
         PORT: '3000',
-        HOSTNAME: '127.0.0.1',
+        HOSTNAME: '0.0.0.0',
       },
       cwd: standaloneDir,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
