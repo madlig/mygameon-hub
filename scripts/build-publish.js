@@ -53,6 +53,21 @@ if (commandArgs.length === 0) {
   console.log('\x1b[33m%s\x1b[0m', '⚠️ GH_TOKEN tidak ditemukan di .env.local, environment, atau gh CLI. Build berjalan tanpa Auto Publish.');
 }
 
+// Pastikan rilis GitHub sudah ada sebelum electron-builder dijalankan agar tidak terjadi race-condition (422 already_exists) saat upload paralel
+if (commandArgs.includes('--publish')) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+    const currentTag = 'v' + pkg.version;
+    const { execSync } = require('child_process');
+    try {
+      execSync(`gh release view ${currentTag}`, { env, stdio: 'ignore' });
+    } catch (_) {
+      console.log(`Membuat rilis GitHub awal untuk ${currentTag}...`);
+      execSync(`gh release create ${currentTag} --title "${pkg.version}" --draft=false --notes "Rilis MyGameON Studio ${currentTag}"`, { env, stdio: 'ignore' });
+    }
+  } catch (_) {}
+}
+
 // Menjalankan electron-builder
 const builderPath = path.join(__dirname, '..', 'node_modules', '.bin', 'electron-builder' + (process.platform === 'win32' ? '.cmd' : ''));
 
