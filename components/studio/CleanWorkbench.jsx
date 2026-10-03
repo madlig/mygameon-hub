@@ -10,6 +10,7 @@ import {
   RotateCcw, Clock
 } from 'lucide-react'
 import { cleanReleaseName } from '@/lib/utils'
+import LocalFolderInspectModal from '@/components/files/LocalFolderInspectModal'
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B'
@@ -62,6 +63,7 @@ export default function CleanWorkbench({
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState('all') // 'all' | 'iso' | 'raw' | 'archive'
   const [showWebSources, setShowWebSources] = useState(false)
+  const [inspectTarget, setInspectTarget] = useState(null) // { folderName, folderPath, type: 'upload' }
 
   // Queue Drawer State & Computed Metrics
   const [isQueueDrawerOpen, setIsQueueDrawerOpen] = useState(false)
@@ -377,6 +379,17 @@ export default function CleanWorkbench({
 
                     {/* Quick Actions (Hover) */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setInspectTarget({ folderName: f.name, folderPath: f.path, type: 'upload' })
+                        }}
+                        className="p-1.5 text-[var(--text-4)] hover:text-amber-400 transition-colors cursor-pointer"
+                        title="Buka & jelajahi isi berkas folder (RAR, ISO, file)"
+                      >
+                        <FolderOpen size={12} />
+                      </button>
                       {f.hasArchive && handleCleanParts && (
                         <button
                           type="button"
@@ -433,9 +446,20 @@ export default function CleanWorkbench({
                       {selectedFolder.path}
                     </p>
                   </div>
-                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 shrink-0">
-                    {selectedFolder.formattedSize || formatBytes(selectedFolder.size)}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setInspectTarget({ folderName: selectedFolder.name, folderPath: selectedFolder.path, type: 'upload' })}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-xs font-bold text-amber-300 transition-colors cursor-pointer shadow-sm"
+                      title="Buka & jelajahi berkas di dalam folder ini"
+                    >
+                      <FolderOpen size={13} />
+                      <span>Buka Isi Folder</span>
+                    </button>
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-xl border border-emerald-500/20 shrink-0">
+                      {selectedFolder.formattedSize || formatBytes(selectedFolder.size)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Progress Bar (Jika Ada Proses Berjalan) */}
@@ -927,6 +951,18 @@ export default function CleanWorkbench({
           </div>
         </div>
       )}
+
+      {/* 📂 Inspeksi Isi Folder Lokal (Multi-Part RAR, ISO, dsb.) */}
+      <LocalFolderInspectModal
+        isOpen={!!inspectTarget}
+        folderName={inspectTarget?.folderName}
+        folderPath={inspectTarget?.folderPath}
+        type={inspectTarget?.type || 'upload'}
+        onClose={() => setInspectTarget(null)}
+        onLaunchWizard={(folderName) => {
+          if (setWizardFolder) setWizardFolder(folderName)
+        }}
+      />
     </div>
   )
 }

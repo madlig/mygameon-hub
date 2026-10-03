@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import PreInstalledWizardModal from '@/components/studio/PreInstalledWizardModal'
+import LocalFolderInspectModal from '@/components/files/LocalFolderInspectModal'
 
 export default function DownloadHubPage() {
   const [data, setData] = useState({
@@ -27,6 +28,7 @@ export default function DownloadHubPage() {
   const [handoffSuccess, setHandoffSuccess] = useState({}) // { [folderName]: true }
   const [notification, setNotification] = useState(null)
   const [wizardFolder, setWizardFolder] = useState(null)
+  const [inspectFolder, setInspectFolder] = useState(null) // { folderName, folderPath, type: 'download' | 'upload' }
 
   // ── 1. Fetch Status Download ──
   const fetchStatus = useCallback(async (isSilent = false) => {
@@ -441,9 +443,15 @@ export default function DownloadHubPage() {
                   {/* Judul & Status Badge */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <span className="font-black text-xs text-amber-200 block truncate" title={item.folderName}>
+                      <button
+                        type="button"
+                        onClick={() => setInspectFolder({ folderName: item.folderName, folderPath: item.fullPath, type: 'download' })}
+                        className="font-black text-xs text-amber-200 block truncate text-left hover:underline cursor-pointer group"
+                        title="Klik untuk melihat isi folder lengkap"
+                      >
                         📁 {item.folderName}
-                      </span>
+                        <span className="opacity-0 group-hover:opacity-100 text-[10px] text-amber-400 ml-1.5 font-normal">(Buka Isi)</span>
+                      </button>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono text-[var(--text-3)] mt-1">
                         <span>
                           Terunduh: <strong className="text-white font-bold">{item.downloadedBytesFormatted || item.totalSizeFormatted}</strong>
@@ -517,13 +525,25 @@ export default function DownloadHubPage() {
                   {/* Footer Bar */}
                   <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-4)] pt-2 border-t border-white/5">
                     <span>Aktivitas disk: {item.secondsSinceLastWrite}d lalu</span>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenFolder(item.fullPath)}
-                      className="text-amber-400 hover:underline flex items-center gap-1 cursor-pointer font-bold"
-                    >
-                      <FolderOpen size={11} /> Buka Folder
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setInspectFolder({ folderName: item.folderName, folderPath: item.fullPath, type: 'download' })}
+                        className="text-amber-300 hover:brightness-125 flex items-center gap-1 cursor-pointer font-bold bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30 transition-all"
+                        title="Buka & jelajahi isi berkas di folder ini"
+                      >
+                        <FolderOpen size={11} />
+                        <span>Lihat Isi Folder</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenFolder(item.fullPath)}
+                        className="text-[var(--text-4)] hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Buka di Windows Explorer PC"
+                      >
+                        Explorer
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -585,9 +605,15 @@ export default function DownloadHubPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="min-w-0 space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-black text-sm text-white truncate max-w-[280px] sm:max-w-md" title={item.folderName}>
+                          <button
+                            type="button"
+                            onClick={() => setInspectFolder({ folderName: item.folderName, folderPath: item.fullPath, type: 'download' })}
+                            className="font-black text-sm text-white truncate max-w-[280px] sm:max-w-md text-left hover:text-amber-300 hover:underline cursor-pointer group"
+                            title="Klik untuk membuka & melihat isi folder"
+                          >
                             {item.folderName}
-                          </h4>
+                            <span className="opacity-0 group-hover:opacity-100 text-[10px] text-amber-400 ml-1.5 font-normal">(Buka Isi)</span>
+                          </button>
                           {item.packageType === 'ISO' || item.hasIso ? (
                             <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[8px] font-mono font-bold text-blue-300 border border-blue-500/30">
                               💿 DISC IMAGE (.ISO)
@@ -618,16 +644,35 @@ export default function DownloadHubPage() {
                           <span>•</span>
                           <button
                             type="button"
-                            onClick={() => handleOpenFolder(item.fullPath)}
-                            className="text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                            onClick={() => setInspectFolder({ folderName: item.folderName, folderPath: item.fullPath, type: 'download' })}
+                            className="text-amber-400 hover:brightness-125 hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                            title="Buka & jelajahi rincian file"
                           >
-                            <FolderOpen size={10} /> Explorer
+                            <FolderOpen size={10} /> Lihat Isi Folder
+                          </button>
+                          <span>•</span>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenFolder(item.fullPath)}
+                            className="text-[var(--text-4)] hover:text-white hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            Explorer
                           </button>
                         </div>
                       </div>
 
                       {/* Tombol Handoff Action */}
                       <div className="flex items-center gap-2 shrink-0">
+                        {/* Quick Inspect Button */}
+                        <button
+                          type="button"
+                          onClick={() => setInspectFolder({ folderName: item.folderName, folderPath: item.fullPath, type: 'download' })}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs font-bold text-[var(--text-2)] hover:text-white transition-all cursor-pointer"
+                          title="Buka & lihat isi folder"
+                        >
+                          <FolderOpen size={12} className="text-amber-400" />
+                          <span className="hidden sm:inline">Buka Isi</span>
+                        </button>
                         {isTransferred ? (
                           <div className="flex items-center gap-2">
                             {(item.packageType === 'ISO' || item.hasIso) && (
@@ -707,12 +752,26 @@ export default function DownloadHubPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {data.historyItems.slice(0, 6).map((h) => (
               <div key={h.id} className="rounded-xl border border-white/5 bg-black/40 p-3 text-xs space-y-1">
-                <span className="font-bold text-white block truncate" title={h.folderName}>
+                <button
+                  type="button"
+                  onClick={() => setInspectFolder({ folderName: h.folderName, folderPath: h.targetPath, type: 'upload' })}
+                  className="font-bold text-white block truncate text-left hover:text-amber-300 hover:underline cursor-pointer w-full"
+                  title="Klik untuk melihat isi folder"
+                >
                   {h.cleanTitle || h.folderName}
-                </span>
+                </button>
                 <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-4)]">
                   <span>{h.sizeFormatted}</span>
-                  <span className="text-emerald-400">Telah Terkirim</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInspectFolder({ folderName: h.folderName, folderPath: h.targetPath, type: 'upload' })}
+                      className="text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <FolderOpen size={10} /> Lihat Isi
+                    </button>
+                    <span className="text-emerald-400">Telah Terkirim</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -734,6 +793,19 @@ export default function DownloadHubPage() {
           })
           setTimeout(() => setNotification(null), 5000)
         }}
+      />
+
+      {/* 📂 Inspeksi Isi Folder Lokal (Multi-Part RAR, ISO, dsb.) */}
+      <LocalFolderInspectModal
+        isOpen={!!inspectFolder}
+        folderName={inspectFolder?.folderName}
+        folderPath={inspectFolder?.folderPath}
+        type={inspectFolder?.type || 'download'}
+        onClose={() => setInspectFolder(null)}
+        onLaunchWizard={(folderName) => {
+          setWizardFolder(folderName)
+        }}
+        onHandoff={inspectFolder?.type === 'download' ? (folderName) => handleHandoff(folderName, 'new') : null}
       />
     </div>
   )
