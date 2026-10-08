@@ -1,16 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { 
   Search, Loader2, Sparkles, Copy, ExternalLink, Image as ImageIcon, 
-  FolderOpen, Check, RefreshCw, AlertCircle, CheckCircle2, Layers, HardDrive
+  FolderOpen, Check, RefreshCw, AlertCircle, CheckCircle2, Layers, HardDrive, ChevronDown
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
+import { useNavigationGuard } from '@/hooks/useNavigationGuard'
+import { useToast } from '@/components/ui/Toast'
 
 export default function ShopeeListingStudio() {
+  const { toast } = useToast()
   const [query, setQuery] = useState('')
   const [searchState, setSearchState] = useState({ status: 'idle', data: null, error: null })
+  const searchAbortRef = useRef(null)
   
+  // Pipeline & Catalog Integration State
+  const [catalogGames, setCatalogGames] = useState([])
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [showCatalogPanel, setShowCatalogPanel] = useState(true)
+  const [activeCatalogGame, setActiveCatalogGame] = useState(null)
+  const [markListedState, setMarkListedState] = useState({ status: 'idle', shopeeUrl: '' })
+
   // Editable fields before generation
   const [title, setTitle] = useState('')
   const [seoTitle, setSeoTitle] = useState('')
@@ -25,6 +36,38 @@ export default function ShopeeListingStudio() {
   const [isOpeningFolder, setIsOpeningFolder] = useState(false)
   const [isAiGenerating, setIsAiGenerating] = useState(false)
   const [aiError, setAiError] = useState(null)
+
+  // Navigation Guard during rendering
+  useNavigationGuard(
+    generateState.status === 'generating',
+    'Slide Shopee sedang dirender. Yakin ingin meninggalkan halaman?'
+  )
+
+  // Load listingOutputDir from preferences on mount
+  useEffect(() => {
+    fetch('/api/preferences')
+      .then(r => r.json())
+      .then(json => {
+        if (json?.listingOutputDir) {
+          setCustomOutputDir(json.listingOutputDir)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Auto-save listingOutputDir preference when changed (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (customOutputDir) {
+        fetch('/api/preferences', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listingOutputDir: customOutputDir })
+        }).catch(() => {})
+      }
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [customOutputDir])
 
   // 0. Racik SEO & Deskripsi dengan Gemini AI
   async function handleAiGenerate() {
@@ -55,15 +98,26 @@ export default function ShopeeListingStudio() {
   }
 
   // 1. Search Steam API
-  async function handleSearch(e) {
+  async function handleSearch(e, overrideQuery = null) {
     if (e) e.preventDefault()
-    if (!query.trim()) return
+    const searchQuery = overrideQuery || query
+    if (!searchQuery.trim()) return
+
+    if (searchAbortRef.current) searchAbortRef.current.abort()
+    const controller = new AbortController()
+    searchAbortRef.current = controller
 
     setSearchState({ status: 'searching', data: null, error: null })
     setGenerateState({ status: 'idle', result: null, error: null })
 
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+
     try {
-      const res = await fetch(`/api/listing/search?query=${encodeURIComponent(query.trim())}`)
+      const res = await fetch(
+        `/api/listing/search?query=${encodeURIComponent(searchQuery.trim())}`,
+        { signal: controller.signal }
+      )
+      clearTimeout(timeoutId)
       const json = await res.json()
 
       if (json.success && json.data) {
@@ -77,7 +131,83 @@ export default function ShopeeListingStudio() {
         setSearchState({ status: 'error', data: null, error: json.error || 'Game tidak ditemukan' })
       }
     } catch (err) {
-      setSearchState({ status: 'error', data: null, error: err.message || 'Gagal menghubungi server' })
+      clearTimeout(timeoutId)
+      if (err.name === 'AbortError') {
+        setSearchState({
+          status: 'error',
+          data: null,
+          error: 'Pencarian timeout (>15 detik). Steam API mungkin sedang lambat. Coba lagi atau gunakan Steam AppID langsung.'
+        })
+      } else {
+        setSearchState({ status: 'error', data: null, error: err.message || 'Gagal menghubungi server' })
+      }
+    }
+  }
+
+  // Fetch unlisted games from catalog pipeline
+  async function fetchUnlistedGames() {
+    setCatalogLoading(true)
+    try {
+      const res = await fetch('/api/catalog/pipeline?shopeeListed=false&status=on_drive,listing_ready&limit=50')
+      const json = await res.json()
+      if (json.success) {
+        setCatalogGames(json.data)
+      }
+    } catch (err) {
+      console.error('Gagal memuat daftar game dari catalog:', err)
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchUnlistedGames()
+
+    const params = new URLSearchParams(window.location.search)
+    const prefill = params.get('prefill') || params.get('game') || params.get('query')
+    if (prefill) {
+      const decodedPrefill = decodeURIComponent(prefill)
+      setQuery(decodedPrefill)
+      setTimeout(() => handleSearch(null, decodedPrefill), 100)
+    }
+  }, [])
+
+  async function handleMarkListed() {
+    if (!activeCatalogGame?._id) {
+      toast('Pilih game dari panel "Belum Di-Listing" terlebih dahulu, atau cari game yang sudah ada di katalog.', 'warning')
+      return
+    }
+
+    setMarkListedState(prev => ({ ...prev, status: 'saving' }))
+    try {
+      const res = await fetch(`/api/catalog/${activeCatalogGame._id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shopeeListed: true,
+          shopeeListedAt: new Date().toISOString(),
+          shopeeUrl: markListedState.shopeeUrl || '',
+          pipelineStatus: 'listed',
+          listingAssets: {
+            seoTitle,
+            description,
+            slidesFolderPath: generateState.result?.targetDir || '',
+            generatedAt: new Date().toISOString()
+          }
+        })
+      })
+      const json = await res.json()
+      if (json.success) {
+        setMarkListedState({ status: 'done', shopeeUrl: markListedState.shopeeUrl })
+        toast('Game berhasil ditandai sebagai Live di Shopee!', 'success')
+        fetchUnlistedGames()
+      } else {
+        setMarkListedState(prev => ({ ...prev, status: 'error' }))
+        toast('Gagal menyimpan status: ' + (json.error || 'Unknown error'), 'error')
+      }
+    } catch (err) {
+      setMarkListedState(prev => ({ ...prev, status: 'error' }))
+      toast('Gagal menghubungi server: ' + err.message, 'error')
     }
   }
 
@@ -149,6 +279,8 @@ export default function ShopeeListingStudio() {
     setDescription('')
     setCoverUrl('')
     setScreenshots([])
+    setMarkListedState({ status: 'idle', shopeeUrl: '' })
+    setActiveCatalogGame(null)
   }
 
   const titleLength = seoTitle.length
@@ -160,6 +292,59 @@ export default function ShopeeListingStudio() {
 
       <div className="flex flex-col flex-1 mt-6 max-w-6xl mx-auto w-full px-4">
         
+        {/* Panel Game Belum Di-Listing */}
+        <div className="mb-6 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] overflow-hidden">
+          <button
+            onClick={() => setShowCatalogPanel(p => !p)}
+            className="w-full flex items-center justify-between px-5 py-3 text-xs font-bold text-[var(--text-2)] hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <HardDrive size={14} className="text-[var(--primary)]" />
+              <span>Game di GDrive — Belum Di-Listing</span>
+              {catalogGames.length > 0 && (
+                <span className="rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 text-[10px] font-mono font-bold">
+                  {catalogGames.length} game
+                </span>
+              )}
+            </div>
+            <ChevronDown size={14} className={`transition-transform ${showCatalogPanel ? 'rotate-180' : ''}`} />
+          </button>
+
+          {showCatalogPanel && (
+            <div className="border-t border-[var(--border-soft)] p-4">
+              {catalogLoading ? (
+                <div className="flex items-center gap-2 text-xs text-[var(--text-4)]">
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Memuat dari catalog...</span>
+                </div>
+              ) : catalogGames.length === 0 ? (
+                <p className="text-xs text-[var(--text-4)] text-center py-2">
+                  Semua game di GDrive sudah di-listing 🎉
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {catalogGames.map(game => (
+                    <button
+                      key={game._id}
+                      onClick={() => {
+                        setQuery(game.cleanTitle || game.name)
+                        handleSearch(null, game.cleanTitle || game.name)
+                        setActiveCatalogGame(game)
+                      }}
+                      className="flex items-center gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-3 py-2 text-xs font-medium text-[var(--text-2)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all cursor-pointer text-left"
+                    >
+                      {game.coverImageUrl && (
+                        <img src={game.coverImageUrl} alt="" className="w-6 h-8 object-cover rounded shrink-0" />
+                      )}
+                      <span className="truncate max-w-[160px]">{game.cleanTitle || game.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Header Hero */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20 text-xs font-semibold mb-3">
@@ -187,6 +372,18 @@ export default function ShopeeListingStudio() {
             className="w-full bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl py-4 pl-12 pr-36 text-[var(--text)] outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-all text-sm"
             required
           />
+          {searchState.status === 'searching' && (
+            <button
+              type="button"
+              onClick={() => {
+                if (searchAbortRef.current) searchAbortRef.current.abort()
+                setSearchState({ status: 'idle', data: null, error: null })
+              }}
+              className="absolute right-36 top-2 bottom-2 px-3 rounded-xl text-xs font-bold text-[var(--text-3)] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+            >
+              Batalkan
+            </button>
+          )}
           <button 
             type="submit"
             disabled={searchState.status === 'searching'}
@@ -497,9 +694,10 @@ export default function ShopeeListingStudio() {
                         <div key={slide.id} className="bg-black/50 border border-white/10 rounded-xl overflow-hidden flex flex-col group">
                           <div className="aspect-square w-full relative overflow-hidden bg-black/80 flex items-center justify-center">
                             <img 
-                              src={slide.dataUrl} 
+                              src={`/api/listing/slide-preview?path=${encodeURIComponent(slide.filePath)}`}
                               alt={slide.title} 
                               className="w-full h-full object-contain group-hover:scale-105 transition-transform" 
+                              loading="lazy"
                             />
                             <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-black/80 text-[var(--primary)] px-1.5 py-0.5 rounded">
                               #{slide.id}
@@ -511,6 +709,49 @@ export default function ShopeeListingStudio() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Mark as Listed Section */}
+                  <div className="mt-6 pt-5 border-t border-white/10">
+                    {markListedState.status === 'done' ? (
+                      <div className="flex items-center gap-3 rounded-2xl bg-green-500/10 border border-green-500/30 px-4 py-3 text-sm text-green-400 font-bold">
+                        <CheckCircle2 size={18} />
+                        <span>✅ Game berhasil ditandai sebagai Live di Shopee!</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold text-[var(--text-3)] uppercase tracking-wider">
+                          Setelah upload ke Shopee selesai:
+                        </p>
+                        <div className="flex gap-3">
+                          <input
+                            type="url"
+                            value={markListedState.shopeeUrl}
+                            onChange={(e) => setMarkListedState(prev => ({ ...prev, shopeeUrl: e.target.value }))}
+                            placeholder="https://shopee.co.id/produk... (opsional)"
+                            className="flex-1 bg-[var(--background)] border border-[var(--border-soft)] rounded-xl py-2.5 px-3.5 text-xs text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                          />
+                          <button
+                            onClick={handleMarkListed}
+                            disabled={markListedState.status === 'saving' || !activeCatalogGame}
+                            className="flex items-center gap-2 rounded-xl bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400 font-bold px-4 py-2.5 text-xs transition-all disabled:opacity-50 cursor-pointer"
+                            title={!activeCatalogGame ? 'Pilih game dari panel catalog terlebih dahulu' : ''}
+                          >
+                            {markListedState.status === 'saving' ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <CheckCircle2 size={14} />
+                            )}
+                            <span>Tandai Sudah Live di Shopee</span>
+                          </button>
+                        </div>
+                        {!activeCatalogGame && (
+                          <p className="text-[10px] text-amber-400">
+                            ⚠️ Pilih game dari panel di atas agar status bisa disimpan ke katalog
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                 </div>

@@ -1,5 +1,6 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, nativeImage } = require('electron');
 app.setName('MyGameON Studio');
+app.setAppUserModelId('com.mygameon.studio');
 const { autoUpdater } = require('electron-updater');
 if (require('electron-squirrel-startup')) return app.quit();
 
@@ -352,7 +353,8 @@ ipcMain.handle('open-game-browser', (_event, { url }) => {
 function createWindow() {
   const iconPath = path.join(__dirname, 'build', 'icon.ico');
   const fallbackIcon = path.join(__dirname, 'public', 'icons', 'icon-512.png');
-  const appIcon = fs.existsSync(iconPath) ? iconPath : (fs.existsSync(fallbackIcon) ? fallbackIcon : undefined);
+  const selectedIconPath = fs.existsSync(iconPath) ? iconPath : fallbackIcon;
+  const appIcon = nativeImage.createFromPath(selectedIconPath);
 
   mainWindow = new BrowserWindow({
     width: 1280,

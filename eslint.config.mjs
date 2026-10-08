@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "dist/**",
+    "dist-build/**",
     "listing_output/**",
     ".claude/**",
     ".codex-handoff/**",

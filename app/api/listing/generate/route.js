@@ -9,6 +9,21 @@ const execFileAsync = promisify(execFile)
 
 const DEFAULT_OUTPUT_BASE = 'D:\\Shopee\\3-listing_output'
 
+// Try both 'python' and 'python3' binary names (Windows vs Unix)
+async function detectPythonBinary() {
+  for (const bin of ['python', 'python3']) {
+    try {
+      const { stdout } = await execFileAsync(bin, ['--version'], { timeout: 5000 })
+      if (stdout.toLowerCase().includes('python 3')) {
+        return bin
+      }
+    } catch (_) {
+      // try next
+    }
+  }
+  return null
+}
+
 async function downloadFile(url, destPath) {
   const res = await fetch(url, {
     headers: {
@@ -23,6 +38,15 @@ async function downloadFile(url, destPath) {
 }
 
 export async function POST(request) {
+  // Detect Python before doing anything
+  const pythonBin = await detectPythonBinary()
+  if (!pythonBin) {
+    return NextResponse.json({
+      success: false,
+      error: 'Python 3 tidak ditemukan di sistem ini. Pastikan Python 3 sudah terinstall dan terdaftar di PATH. Download: https://www.python.org/downloads/'
+    }, { status: 503 })
+  }
+
   let tempDir = null
   try {
     const body = await request.json()
@@ -73,7 +97,8 @@ export async function POST(request) {
     const cleanTitle = title.toUpperCase().trim()
     const safeFolderName = cleanTitle.replace(/[^A-Z0-9 _-]/g, '_').trim()
     
-    let baseOutputDir = customOutputDir || 'D:\\Shopee\\3-listing_output'
+    const fallbackDir = process.env.LISTING_OUTPUT_DIR || path.join(process.cwd(), 'listing_output')
+    let baseOutputDir = customOutputDir || fallbackDir
     if (!fs.existsSync(baseOutputDir)) {
       try {
         fs.mkdirSync(baseOutputDir, { recursive: true })
@@ -101,7 +126,7 @@ export async function POST(request) {
 
     // 6. Execute Python rendering script
     const scriptPath = path.join(/*turbopackIgnore: true*/ process.cwd(), 'scripts', 'render_listing.py')
-    const { stdout, stderr } = await execFileAsync('python', [scriptPath, configPath])
+    const { stdout, stderr } = await execFileAsync(pythonBin, [scriptPath, configPath])
 
     let renderResult = null
     try {
@@ -115,7 +140,7 @@ export async function POST(request) {
       throw new Error(renderResult.error || 'Gagal menghasilkan slide listing')
     }
 
-    // 7. Read slides as base64 for instant live preview in frontend
+    // 7. Return slide metadata with file paths (no large base64 in JSON)
     const slideDefinitions = [
       { id: 1, title: 'Slide 1: Cover Utama', fileName: 'SLIDE_1_THUMBNAIL.jpg' },
       { id: 2, title: 'Slide 2: Kolase Gameplay 4-in-1', fileName: 'SLIDE_2_GAMEPLAY_4IN1.jpg' },
@@ -129,14 +154,11 @@ export async function POST(request) {
     for (const def of slideDefinitions) {
       const filePath = path.join(targetDir, def.fileName)
       if (fs.existsSync(filePath)) {
-        const fileBuffer = fs.readFileSync(filePath)
-        const base64 = fileBuffer.toString('base64')
         slides.push({
           id: def.id,
           title: def.title,
           fileName: def.fileName,
-          filePath,
-          dataUrl: `data:image/jpeg;base64,${base64}`
+          filePath
         })
       }
     }

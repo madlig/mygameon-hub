@@ -207,6 +207,60 @@ export async function POST(request) {
       })
     }
 
+    // 3. Action: Ratakan Folder Bertingkat (Flatten Nested Wrapper Folder)
+    if (action === 'flatten_folder') {
+      const { folderPath } = body
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return NextResponse.json({ error: 'Folder path tidak ditemukan.' }, { status: 400 })
+      }
+
+      const stat = fs.statSync(folderPath)
+      if (!stat.isDirectory()) {
+        return NextResponse.json({ error: 'Target bukan direktori.' }, { status: 400 })
+      }
+
+      const entries = fs.readdirSync(folderPath)
+      // Temukan subfolder tunggal
+      const subdirs = entries.filter((e) => {
+        try {
+          return fs.statSync(path.join(folderPath, e)).isDirectory()
+        } catch (_) {
+          return false
+        }
+      })
+
+      if (subdirs.length !== 1) {
+        return NextResponse.json({
+          error: `Tidak dapat meratakan folder: harus memiliki tepat 1 subfolder (ditemukan ${subdirs.length}).`
+        }, { status: 400 })
+      }
+
+      const innerDirName = subdirs[0]
+      const innerDirPath = path.join(folderPath, innerDirName)
+      const innerItems = fs.readdirSync(innerDirPath)
+
+      let movedCount = 0
+      for (const item of innerItems) {
+        const srcPath = path.join(innerDirPath, item)
+        const destPath = path.join(folderPath, item)
+        if (!fs.existsSync(destPath)) {
+          fs.renameSync(srcPath, destPath)
+          movedCount++
+        }
+      }
+
+      // Hapus subfolder lama yang sudah kosong
+      try {
+        fs.rmdirSync(innerDirPath)
+      } catch (_) {}
+
+      return NextResponse.json({
+        success: true,
+        message: `Berhasil meratakan struktur folder. ${movedCount} berkas/folder dipindahkan ke direktori utama.`,
+        movedCount
+      })
+    }
+
     return NextResponse.json({ error: `Aksi tidak dikenal: ${action}` }, { status: 400 })
   } catch (err) {
     console.error('Local Games POST Error:', err)
@@ -295,7 +349,7 @@ export async function DELETE(request) {
     }
 
     const body = await request.json()
-    const { stagingPath: customStaging, itemName, mode = 'clean_parts_only', isArchiveFile } = body
+    const { stagingPath: customStaging, itemName, folderPath, mode = 'clean_parts_only', isArchiveFile, partNames = [] } = body
 
     const stagingPath = resolveUploadDirectory(customStaging)
     const cleanItem = itemName?.trim()
@@ -306,21 +360,33 @@ export async function DELETE(request) {
 
     const escapedItem = cleanItem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const partRegex = new RegExp(`^${escapedItem}(\\.part\\d+)?\\.(rar|7z|zip|r\\d+)$`, 'i')
+    const normItem = cleanItem.toLowerCase().replace(/[-_.\s+]+/g, '')
+
+    const isMatchingPart = (f) => {
+      if (!/\.(rar|7z|zip|r\d+|part\d+\.rar)$/i.test(f)) return false
+      if (partRegex.test(f)) return true
+      const fBase = f.replace(/\.part\d+\.(rar|7z|zip)$/i, '').replace(/\.(rar|7z|zip|r\d+)$/i, '')
+      const normF = fBase.toLowerCase().replace(/[-_.\s+]+/g, '')
+      return normF === normItem || (normItem.length >= 3 && (normF.startsWith(normItem) || normItem.startsWith(normF)))
+    }
 
     let freedBytes = 0
     const deletedParts = []
 
     // ── MODE 1: Bersihkan HANYA file .part*.rar sementara (Pertahankan Folder Game) ──
     if (mode === 'clean_parts_only') {
-      // 1. Cari part di folder staging level utama
-      if (fs.existsSync(stagingPath)) {
-        const files = fs.readdirSync(stagingPath)
-        for (const f of files) {
-          if (partRegex.test(f)) {
-            const p = path.join(stagingPath, f)
+      const innerFolder = folderPath && fs.existsSync(folderPath) ? folderPath : path.join(stagingPath, cleanItem)
+
+      // 1. Jika partNames spesifik disertakan dari client, hapus berkas-berkas tersebut
+      if (Array.isArray(partNames) && partNames.length > 0) {
+        for (const f of partNames) {
+          const p1 = path.join(stagingPath, f)
+          const p2 = path.join(innerFolder, f)
+          const targetP = fs.existsSync(p1) ? p1 : (fs.existsSync(p2) ? p2 : null)
+          if (targetP) {
             try {
-              const sz = fs.statSync(p).size
-              fs.unlinkSync(p)
+              const sz = (await fs.promises.stat(targetP)).size
+              await fs.promises.unlink(targetP)
               freedBytes += sz
               deletedParts.push(f)
             } catch (_) {}
@@ -328,17 +394,34 @@ export async function DELETE(request) {
         }
       }
 
-      // 2. Cari part di dalam subfolder game jika ada
-      const innerFolder = path.join(stagingPath, cleanItem)
+      // 2. Cari part di folder staging level utama
+      if (fs.existsSync(stagingPath)) {
+        try {
+          const files = await fs.promises.readdir(stagingPath)
+          for (const f of files) {
+            if (isMatchingPart(f) && !deletedParts.includes(f)) {
+              const p = path.join(stagingPath, f)
+              try {
+                const sz = (await fs.promises.stat(p)).size
+                await fs.promises.unlink(p)
+                freedBytes += sz
+                deletedParts.push(f)
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. Cari part di dalam subfolder game jika ada
       if (fs.existsSync(innerFolder) && fs.statSync(innerFolder).isDirectory()) {
         try {
-          const innerFiles = fs.readdirSync(innerFolder)
+          const innerFiles = await fs.promises.readdir(innerFolder)
           for (const f of innerFiles) {
-            if (partRegex.test(f) || /\.part\d+\.rar$/i.test(f)) {
+            if ((isMatchingPart(f) || /\.part\d+\.rar$/i.test(f) || f.toLowerCase().endsWith('.rar')) && !deletedParts.includes(f)) {
               const p = path.join(innerFolder, f)
               try {
-                const sz = fs.statSync(p).size
-                fs.unlinkSync(p)
+                const sz = (await fs.promises.stat(p)).size
+                await fs.promises.unlink(p)
                 freedBytes += sz
                 deletedParts.push(`${cleanItem}/${f}`)
               } catch (_) {}
@@ -360,49 +443,75 @@ export async function DELETE(request) {
       })
     }
 
-    // ── MODE 2: Hapus Total (Folder Game + Seluruh Part Arsip) ──
-    if (mode === 'delete_all') {
-      // 1. Hapus semua part arsip di staging
+    // ── MODE 2: Hapus Total (Folder Game + Seluruh Part Arsip) atau Hapus Folder ──
+    if (mode === 'delete_all' || mode === 'delete_folder') {
+      // 1. Hapus semua part arsip di staging secara non-blocking
       if (fs.existsSync(stagingPath)) {
-        const files = fs.readdirSync(stagingPath)
-        for (const f of files) {
-          if (partRegex.test(f)) {
-            const p = path.join(stagingPath, f)
-            try {
-              const sz = fs.statSync(p).size
-              fs.unlinkSync(p)
-              freedBytes += sz
-              deletedParts.push(f)
-            } catch (_) {}
+        try {
+          const files = await fs.promises.readdir(stagingPath)
+          for (const f of files) {
+            if (isMatchingPart(f)) {
+              const p = path.join(stagingPath, f)
+              try {
+                const sz = (await fs.promises.stat(p)).size
+                await fs.promises.unlink(p)
+                freedBytes += sz
+                deletedParts.push(f)
+              } catch (_) {}
+            }
           }
-        }
+        } catch (_) {}
       }
 
-      // 2. Hapus folder game jika ada
-      const targetDir = path.join(stagingPath, cleanItem)
-      if (fs.existsSync(targetDir) && fs.statSync(targetDir).isDirectory()) {
+      // 2. Tentukan targetDir folder game (gunakan folderPath jika ada, atau fallback ke stagingPath)
+      const targetDir = folderPath && fs.existsSync(folderPath)
+        ? folderPath
+        : path.join(stagingPath, cleanItem)
+
+      const folderSizeParam = Number(body.folderSize) || 0
+      if (folderSizeParam > 0) {
+        freedBytes += folderSizeParam
+      }
+
+      if (fs.existsSync(targetDir)) {
         try {
-          fs.rmSync(targetDir, { recursive: true, force: true })
+          const targetStat = await fs.promises.stat(targetDir)
+          if (targetStat.isDirectory()) {
+            // Hapus direktori secara asynchronous tanpa blocking event loop
+            await fs.promises.rm(targetDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+          } else if (targetStat.isFile()) {
+            freedBytes += targetStat.size
+            await fs.promises.unlink(targetDir)
+          }
         } catch (e) {
           return NextResponse.json({ error: `Gagal menghapus folder "${cleanItem}": ${e.message}` }, { status: 500 })
         }
       }
 
-      // 3. Jika itu file tunggal (misal .rar berdiri sendiri)
-      const singleFile = path.join(stagingPath, cleanItem)
-      if (fs.existsSync(singleFile) && fs.statSync(singleFile).isFile()) {
-        try {
-          fs.unlinkSync(singleFile)
-        } catch (_) {}
-      }
-
       return NextResponse.json({
         success: true,
-        mode: 'delete_all',
+        mode,
         itemName: cleanItem,
         freedBytes,
         formattedFreed: formatBytes(freedBytes),
-        message: `Berhasil menghapus "${cleanItem}" beserta seluruh berkasnya.`
+        message: `Berhasil menghapus "${cleanItem}" beserta seluruh berkasnya (${formatBytes(freedBytes)} dibebaskan).`
+      })
+    }
+
+    // ── MODE 3: Hapus Berkas Tunggal ──
+    if (mode === 'delete_single_file') {
+      const targetFilePath = body.targetFilePath
+      if (!targetFilePath || !fs.existsSync(targetFilePath)) {
+        return NextResponse.json({ error: 'Berkas tidak ditemukan' }, { status: 404 })
+      }
+      const sz = (await fs.promises.stat(targetFilePath)).size
+      await fs.promises.unlink(targetFilePath)
+      return NextResponse.json({
+        success: true,
+        mode: 'delete_single_file',
+        freedBytes: sz,
+        formattedFreed: formatBytes(sz),
+        message: `Berkas "${path.basename(targetFilePath)}" berhasil dihapus.`
       })
     }
 

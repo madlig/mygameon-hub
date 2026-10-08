@@ -325,7 +325,7 @@ export default function PreInstalledWizardModal({
               }`}
             >
               <Zap size={14} />
-              <span>⚡ Mode Otomatis (1-Klik Silent)</span>
+              <span>⚡ Mode Otomatis (1-Klik Semi-Silent)</span>
               <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${mode === 'auto' ? 'bg-black/20 text-black font-extrabold' : 'bg-emerald-500/10 text-emerald-400 font-bold'}`}>
                 Rekomendasi
               </span>
@@ -500,10 +500,38 @@ export default function PreInstalledWizardModal({
                         <span className="font-mono text-emerald-300 font-bold break-all">{targetPathInput || setupInfo.suggestedTargetPath}</span>
                       </p>
                       <p className="text-[11px] text-amber-300/90 mt-1.5">
-                        ✓ Berkas ISO mentah &amp; installer sementara telah dihapus (disk PC bertambah lega).<br />
+                        ✓ Berkas ISO mentah tetap tersimpan aman di folder unduhan (tidak dihapus otomatis).<br />
                         ✓ Dokumen branding &amp; panduan resmi MyGameON telah disematkan.<br />
                         ✓ UserName pemain &quot;{userNameInput}&quot; telah dikonfigurasi ke seluruh emulator crack.
                       </p>
+                    </div>
+                  </div>
+                ) : pipelineSession?.status === 'error' || (step === 'ready' && error) ? (
+                  <div className="rounded-2xl border border-rose-500/40 bg-gradient-to-br from-rose-950/40 via-black/50 to-black/60 p-5 text-center space-y-3 shadow-xl">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 mx-auto shadow-md">
+                      <AlertTriangle size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm text-white">Instalasi Gagal / Terputus!</h4>
+                      <p className="text-xs text-rose-300 mt-1 font-mono bg-rose-500/10 p-2.5 rounded-xl border border-rose-500/20 max-w-lg mx-auto leading-relaxed">
+                        {error || pipelineSession?.error || 'Proses installer mengalami kesalahan saat mengekstrak data.'}
+                      </p>
+                      <p className="text-[11px] text-[var(--text-4)] mt-2">
+                        Berkas mentah tidak dihapus agar data unduhan Anda tetap aman.
+                      </p>
+                    </div>
+                    <div className="pt-2 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError(null)
+                          setPipelineSession(null)
+                          setStep('ready')
+                        }}
+                        className="px-4 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-white transition-colors cursor-pointer"
+                      >
+                        Coba Lagi
+                      </button>
                     </div>
                   </div>
                 ) : pipelineSession?.status === 'running' ? (
@@ -527,19 +555,19 @@ export default function PreInstalledWizardModal({
 
                       <div className={`flex items-center gap-2.5 ${pipelineSession.stepIndex > (setupInfo.hasIso ? 2 : 1) ? 'text-emerald-400 font-medium' : pipelineSession.step === 'installing_base' ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
                         {pipelineSession.stepIndex > (setupInfo.hasIso ? 2 : 1) ? <CheckCircle2 size={16} /> : pipelineSession.step === 'installing_base' ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">2</span>}
-                        <span>2. Instalasi Game Utama (Silent Inno Setup)</span>
+                        <span>2. Instalasi Game Utama (Inno Setup Semi-Silent)</span>
                       </div>
 
                       {setupInfo.hasUpdate && (
                         <div className={`flex items-center gap-2.5 ${pipelineSession.stepIndex > 3 ? 'text-emerald-400 font-medium' : pipelineSession.step === 'installing_update' ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
                           {pipelineSession.stepIndex > 3 ? <CheckCircle2 size={16} /> : pipelineSession.step === 'installing_update' ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">3</span>}
-                          <span>3. Instalasi Patch Update (Silent Inno Setup)</span>
+                          <span>3. Instalasi Patch Update (Inno Setup Semi-Silent)</span>
                         </div>
                       )}
 
                       <div className={`flex items-center gap-2.5 ${pipelineSession.status === 'completed' ? 'text-emerald-400 font-medium' : pipelineSession.step === 'finalizing' ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
                         {pipelineSession.status === 'completed' ? <CheckCircle2 size={16} /> : pipelineSession.step === 'finalizing' ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">{setupInfo.hasUpdate ? '4' : '3'}</span>}
-                        <span>{setupInfo.hasUpdate ? '4' : '3'}. Pembersihan ISO Mentah & Injeksi Dokumen Branding</span>
+                        <span>{setupInfo.hasUpdate ? '4' : '3'}. Dismount Virtual ISO &amp; Injeksi Dokumen Branding</span>
                       </div>
                     </div>
 
@@ -558,7 +586,7 @@ export default function PreInstalledWizardModal({
                       <span className="font-bold text-xs text-white">Full-Automated (Unattended) Pipeline</span>
                     </div>
                     <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
-                      Sistem akan me-mount ISO, menginstal game utama + update secara otomatis di latar belakang (Silent), membersihkan berkas ISO mentah untuk menghemat ruang disk, dan menyuntikkan dokumen branding resmi MyGameON tanpa perlu klik berkali-kali.
+                      Sistem akan me-mount ISO, menginstal game utama + update secara semi-silent (progress bar ekstraksi tampak di layar PC), menyuntikkan dokumen branding resmi MyGameON, dan menyiapkan game matang di Upload Studio. File ISO mentah tetap aman di folder Download.
                     </p>
                     <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 text-[10px] text-amber-200 font-mono flex items-center gap-2">
                       <ShieldCheck size={14} className="text-amber-400 shrink-0" />
@@ -647,7 +675,7 @@ export default function PreInstalledWizardModal({
                         </span>
                       )}
                       <span className="text-xs font-bold text-white">
-                        {setupInfo.hasUpdate ? '3' : '2'}. Hapus File ISO Mentah & Injeksi Panduan Direct Play
+                        {setupInfo.hasUpdate ? '3' : '2'}. Dismount Virtual ISO &amp; Injeksi Dokumen Branding Resmi
                       </span>
                     </div>
                   </div>
@@ -686,7 +714,7 @@ export default function PreInstalledWizardModal({
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-black text-black hover:bg-emerald-400 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
                   >
                     <CheckCircle2 size={14} />
-                    <span>🚀 Selesai (Lanjut ke Pengarsipan & Upload)</span>
+                    <span>🚀 Selesai (Lanjut ke Meja Kerja Studio)</span>
                   </button>
                 ) : pipelineSession?.status === 'running' ? (
                   <button
@@ -752,8 +780,8 @@ export default function PreInstalledWizardModal({
                         onClick={handleFinalizeGame}
                         className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-black text-black hover:bg-emerald-400 transition-all cursor-pointer shadow-lg"
                       >
-                        <Trash2 size={14} />
-                        <span>Bersihkan ISO & Jadikan Game Matang</span>
+                        <Sparkles size={14} />
+                        <span>Finalisasi Game ke Upload Studio</span>
                       </button>
                     )
                   )}
@@ -765,7 +793,7 @@ export default function PreInstalledWizardModal({
                       className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-black text-black hover:bg-emerald-400 transition-all cursor-pointer shadow-lg"
                     >
                       <Check size={14} />
-                      <span>Konfirmasi: Update & Verifikasi Data Selesai</span>
+                      <span>Konfirmasi: Update &amp; Verifikasi Data Selesai</span>
                     </button>
                   )}
 
@@ -775,8 +803,8 @@ export default function PreInstalledWizardModal({
                       onClick={handleFinalizeGame}
                       className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 px-5 py-2.5 text-xs font-black text-black hover:from-emerald-400 hover:to-emerald-300 transition-all cursor-pointer shadow-lg"
                     >
-                      <Trash2 size={14} />
-                      <span>Bersihkan Berkas Mentah & Finalisasi</span>
+                      <Sparkles size={14} />
+                      <span>Finalisasi Game ke Upload Studio</span>
                     </button>
                   )}
 

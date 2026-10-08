@@ -3,16 +3,24 @@ import mongoose from 'mongoose'
 const orderSchema = new mongoose.Schema({
   email: {
     type: String,
-    required: true,
     lowercase: true,
     trim: true,
-    index: true
+    index: true,
+    default: ''
+  },
+  invoice: {
+    type: String,
+    default: '',
+    index: true,
+    trim: true
   },
   cartItems: [{
     name: String,
     targetId: String,
     ownerEmail: String,
-    isBonus: Boolean
+    isBonus: Boolean,
+    isSims4: Boolean,
+    allowCC: Boolean
   }],
   orderDate: {
     type: Date,

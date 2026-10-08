@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, ArrowRight, Loader2, AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import WorkspaceDrivePicker from '@/components/studio/WorkspaceDrivePicker';
 
 export default function FileMoveModal({ isOpen, onClose, file, sourceEmail, workspaces, onSuccess }) {
   const [targetEmail, setTargetEmail] = useState('');
@@ -54,10 +55,10 @@ export default function FileMoveModal({ isOpen, onClose, file, sourceEmail, work
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-2xl">
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/5 bg-[#0a0b0f] px-6 py-4">
+        <div className="flex items-center justify-between border-b border-white/5 bg-[#0a0b0f] px-6 py-4 rounded-t-2xl">
           <h2 className="text-sm font-bold text-[var(--text)]">Pindah Game Antar-Workspace</h2>
           <button
             onClick={onClose}
@@ -77,12 +78,16 @@ export default function FileMoveModal({ isOpen, onClose, file, sourceEmail, work
           <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-black/20 p-3 text-xs">
             <div className="min-w-0 flex-1 truncate">
               <span className="text-[9px] uppercase text-[var(--text-4)] font-bold">Sumber</span>
-              <p className="font-semibold text-[var(--text-2)] truncate">{sourceEmail}</p>
+              <p className="font-semibold text-[var(--text-2)] truncate">
+                {sourceEmail?.startsWith('shared:') ? '📁 Shared Drive KEBERSAMAAN' : sourceEmail}
+              </p>
             </div>
             <ArrowRight size={16} className="text-[var(--primary)] shrink-0" />
             <div className="min-w-0 flex-1 truncate">
               <span className="text-[9px] uppercase text-[var(--text-4)] font-bold">Tujuan</span>
-              <p className="font-semibold text-[var(--primary)] truncate">{targetEmail || 'Pilih akun...'}</p>
+              <p className="font-semibold text-[var(--primary)] truncate">
+                {targetEmail?.startsWith('shared:') ? '📁 Shared Drive KEBERSAMAAN' : (targetEmail || 'Pilih akun...')}
+              </p>
             </div>
           </div>
 
@@ -90,19 +95,14 @@ export default function FileMoveModal({ isOpen, onClose, file, sourceEmail, work
             <label className="block mb-1.5 text-xs font-semibold text-[var(--text-3)]">
               Pilih Workspace Tujuan:
             </label>
-            <select
+            <WorkspaceDrivePicker
+              workspaces={targetWorkspaces}
               value={targetEmail}
-              onChange={(e) => setTargetEmail(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs text-[var(--text)] focus:border-[var(--primary)] focus:outline-none"
+              onChange={(email) => setTargetEmail(email)}
               disabled={loading || success}
-            >
-              <option value="">-- Pilih Akun Workspace --</option>
-              {targetWorkspaces.map((w) => (
-                <option key={w.email} value={w.email}>
-                  {w.email} (Sisa: {(w.storage.limitGB - parseFloat(w.storage.usageGB)).toFixed(1)} GB free)
-                </option>
-              ))}
-            </select>
+              placeholder="-- Pilih Akun Workspace --"
+              className="w-full"
+            />
           </div>
 
           {error && (

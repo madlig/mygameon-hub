@@ -23,6 +23,116 @@ export async function GET(request) {
 
     await connectToDatabase();
 
+    // ── KONDISI KHUSUS: SHARED DRIVE (KEBERSAMAAN) ──
+    if (email.startsWith('shared:')) {
+      const sharedDriveId = email.replace('shared:', '').trim();
+      const drive = await getClientForEmail(email);
+
+      const driveFolders = [];
+
+      // 1. Ambil folder langsung di root Shared Drive
+      let pageToken;
+      try {
+        do {
+          const res = await drive.files.list({
+            q: `'${sharedDriveId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
+            pageSize: 100,
+            pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+            corpora: 'drive',
+            driveId: sharedDriveId,
+            fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
+          });
+
+          for (const f of res.data.files || []) {
+            // Jika ada container folder seperti 'New Upload', 'Upload', atau 'Staging', ambil folder game di dalamnya
+            if (f.name.toLowerCase() === 'new upload' || f.name.toLowerCase() === 'upload' || f.name.toLowerCase() === 'staging') {
+              let subPageToken;
+              try {
+                do {
+                  const subRes = await drive.files.list({
+                    q: `'${f.id}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
+                    pageSize: 100,
+                    pageToken: subPageToken,
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true,
+                    corpora: 'drive',
+                    driveId: sharedDriveId,
+                    fields: 'nextPageToken, files(id, name, createdTime, modifiedTime)',
+                  });
+
+                  for (const sf of subRes.data.files || []) {
+                    if (!driveFolders.some((df) => df.id === sf.id)) {
+                      driveFolders.push({
+                        ...sf,
+                        parentContainerName: f.name,
+                        parentContainerId: f.id,
+                      });
+                    }
+                  }
+                  subPageToken = subRes.data.nextPageToken;
+                } while (subPageToken);
+              } catch (subErr) {
+                console.warn(`[files/list] Gagal scan sub-container ${f.name}:`, subErr.message);
+              }
+            } else {
+              if (!driveFolders.some((df) => df.id === f.id)) {
+                driveFolders.push(f);
+              }
+            }
+          }
+          pageToken = res.data.nextPageToken;
+        } while (pageToken);
+      } catch (scanErr) {
+        console.warn(`[files/list] Gagal scan shared drive ${sharedDriveId}:`, scanErr.message);
+      }
+
+      // Filter pencarian jika ada
+      const filteredDriveFolders = query
+        ? driveFolders.filter((f) => f.name.toLowerCase().includes(query.toLowerCase()))
+        : driveFolders;
+
+      // Hubungkan folder ID yang ditemukan dengan GameCatalog di DB
+      const folderIds = filteredDriveFolders.map((f) => f.id);
+      const catalogItems = await GameCatalog.find({ folderId: { $in: folderIds } }).lean();
+      const catalogMap = new Map(catalogItems.map((c) => [c.folderId, c]));
+
+      const mergedFiles = filteredDriveFolders.map((f) => {
+        const catalogEntry = catalogMap.get(f.id);
+        return {
+          id: f.id,
+          name: f.name,
+          ownerEmail: catalogEntry ? catalogEntry.ownerEmail : email,
+          parentContainerName: f.parentContainerName || null,
+          totalSize: catalogEntry ? catalogEntry.totalSize || 0 : 0,
+          fileCount: catalogEntry ? catalogEntry.fileCount || 0 : 0,
+          sendCount: catalogEntry ? catalogEntry.sendCount || 0 : 0,
+          isCataloged: !!catalogEntry,
+          catalogId: catalogEntry ? catalogEntry._id : null,
+          createdTime: f.createdTime,
+          modifiedTime: f.modifiedTime,
+          lastSyncedAt: catalogEntry ? catalogEntry.lastSyncedAt : null,
+          firestoreSyncedAt: catalogEntry?.firestoreSyncedAt || null,
+          coverImageUrl: catalogEntry?.coverImageUrl || null,
+          steamAppId: catalogEntry?.steamAppId || null,
+          cleanTitle: catalogEntry?.cleanTitle || null,
+          driveUrl: `https://drive.google.com/drive/folders/${f.id}`,
+          isSharedDriveItem: true,
+        };
+      });
+
+      mergedFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+      return NextResponse.json({
+        success: true,
+        files: mergedFiles,
+        total: mergedFiles.length,
+        isLive: true,
+        isSharedDrive: true,
+      });
+    }
+
     // 1. Ambil data katalog MongoDB untuk workspace ini
     let catalogFilter = { ownerEmail: email };
     if (query) {

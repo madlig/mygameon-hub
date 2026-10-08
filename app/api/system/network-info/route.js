@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import os from 'os'
 import { auth } from '@/app/api/auth/[...nextauth]/route'
+import { remoteTunnel } from '@/lib/remoteTunnel'
 
 export async function GET(request) {
   try {
     const session = await auth()
-    // Bisa diakses oleh session admin ATAU jika dipanggil lokal dari desktop app
+    if (!session?.user?.email || session.user.email !== process.env.ADMIN_EMAIL) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const interfaces = os.networkInterfaces()
     const addresses = []
 
@@ -28,9 +32,16 @@ export async function GET(request) {
 
     const primaryIp = addresses.length > 0 ? addresses[0].ip : 'localhost'
     const port = process.env.PORT || 3000
-    const pin = process.env.ADMIN_PIN || process.env.C2_SECRET_KEY || 'mygameon'
+    const pin = process.env.ADMIN_PIN || 'mygameon'
+    const adminEmail = process.env.ADMIN_EMAIL || ''
     const mobileUrl = `http://${primaryIp}:${port}`
-    const quickLoginUrl = `${mobileUrl}/login?pin=${encodeURIComponent(pin)}`
+    const quickLoginUrl = `${mobileUrl}/login?email=${encodeURIComponent(adminEmail)}&pin=${encodeURIComponent(pin)}`
+
+    const tunnel = remoteTunnel.getStatus()
+    const remoteUrl = tunnel.publicUrl || null
+    const quickLoginUrlRemote = remoteUrl
+      ? `${remoteUrl}/login?email=${encodeURIComponent(adminEmail)}&pin=${encodeURIComponent(pin)}`
+      : null
 
     return NextResponse.json({
       success: true,
@@ -39,9 +50,15 @@ export async function GET(request) {
         port,
         primaryIp,
         addresses,
+        adminEmail,
         pin,
         mobileUrl,
-        quickLoginUrl
+        quickLoginUrl,
+        remoteUrl,
+        quickLoginUrlRemote,
+        tunnelActive: tunnel.active,
+        tunnelStatus: tunnel.status,
+        isCustomDomain: !!process.env.CLOUDFLARE_TUNNEL_DOMAIN,
       }
     })
   } catch (err) {

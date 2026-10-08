@@ -63,4 +63,7 @@ dist-build/
 studio-state.json
 studio-config.json
 studio-queue.json
+download-state.json
+download-tasks.json
 scratch/
+bin/

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/app/api/auth/[...nextauth]/route'
 import { getStudioQueue, saveStudioQueue } from '@/lib/studioConfig'
+import { activeJobController } from '@/lib/studioProcessor'
 
 // ── GET: Ambil daftar antrean tersimpan ──
 export async function GET() {
@@ -10,7 +11,28 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const queue = getStudioQueue()
+    let queue = getStudioQueue()
+    const ctrl = activeJobController.getStatus()
+    // Jika tidak ada job di RAM yang aktif, sembuhkan item antrean yang tertinggal 'processing' akibat restart
+    if (!ctrl.hasActiveStream && !ctrl.hasActiveChild && !ctrl.isPaused) {
+      let hasChanges = false
+      queue = queue.map((item) => {
+        if (item.status === 'processing') {
+          hasChanges = true
+          return {
+            ...item,
+            status: 'waiting',
+            text: 'Terputus saat restart (siap dilanjutkan)',
+            progress: 0,
+          }
+        }
+        return item
+      })
+      if (hasChanges) {
+        saveStudioQueue(queue)
+      }
+    }
+
     return NextResponse.json({ success: true, queue })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })

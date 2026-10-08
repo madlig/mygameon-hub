@@ -4,6 +4,8 @@ import path from 'path'
 import connectDB from '@/lib/db'
 import mongoose from 'mongoose'
 
+import { activeJobController } from '@/lib/studioProcessor'
+
 const STATE_FILE = path.join(process.cwd(), 'studio-state.json')
 
 function getLocalJobState() {
@@ -47,7 +49,31 @@ export async function GET() {
     const localState = getLocalJobState()
     const activeStatuses = ['processing', 'paused', 'cancelled', 'success', 'error']
     if (localState && activeStatuses.includes(localState.status)) {
-      return NextResponse.json(localState)
+      // Deteksi zombie state jika proses lokal mati akibat restart PC/server
+      // Berikan toleransi grace period 35 detik berdasarkan updatedAt untuk mencegah false-positive saat inisialisasi
+      const ctrlStatus = activeJobController.getStatus()
+      const now = Date.now()
+      const lastUpdate = localState.updatedAt || 0
+      const isStale = (now - lastUpdate) > 35000
+
+      if (
+        (localState.status === 'processing' || localState.status === 'paused') &&
+        isStale &&
+        !ctrlStatus.isPaused &&
+        !ctrlStatus.hasActiveStream &&
+        !ctrlStatus.hasActiveChild
+      ) {
+        localState.status = 'error'
+        localState.text = 'Operasi terputus karena PC/server terestart. Silakan klik tombol Upload kembali untuk melanjutkan.'
+        localState.errorDetail = {
+          category: 'RESTART_RECOVERY',
+          title: 'Koneksi Terputus (PC / Server Terestart)',
+          cause: 'Proses upload terhenti karena komputer atau aplikasi dimatikan/direstart.',
+          solution: 'File part yang sudah selesai (100%) aman tersimpan di Google Drive. Klik tombol Upload kembali untuk otomatis menyambung.',
+        }
+        setLocalJobState(localState)
+      }
+      return NextResponse.json({ success: true, state: localState, ...localState })
     }
 
     // 2. Fallback ke DesktopState MongoDB (Remote C2 Mode)
@@ -55,17 +81,19 @@ export async function GET() {
     const state = await DesktopState.findOne({ machineId: 'mygameon-pc-1' })
     
     if (state && state.currentTask && activeStatuses.includes(state.currentTask.status)) {
-      return NextResponse.json({
+      const remoteState = {
         status: state.currentTask.status,
         progress: state.currentTask.progress || 0,
         text: state.currentTask.text || '',
         logs: [],
         errorDetail: state.currentTask.errorDetail || null,
-      })
+      }
+      return NextResponse.json({ success: true, state: remoteState, ...remoteState })
     }
 
     // 3. Status Netral (Idle) jika tidak ada task yang sedang berjalan
-    return NextResponse.json({ status: 'idle', progress: 0, text: '', logs: [], errorDetail: null })
+    const idleState = { status: 'idle', progress: 0, text: '', logs: [], errorDetail: null }
+    return NextResponse.json({ success: true, state: idleState, ...idleState })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

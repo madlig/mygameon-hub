@@ -22,6 +22,10 @@ const UserPreferencesSchema = new mongoose.Schema({
     type: Array, // Array of { id, name, items: [] }
     default: [],
   },
+  listingOutputDir: {
+    type: String,
+    default: '',
+  },
 }, { timestamps: true });
 
 export default mongoose.models.UserPreferences || mongoose.model('UserPreferences', UserPreferencesSchema);

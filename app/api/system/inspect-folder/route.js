@@ -190,6 +190,57 @@ export async function GET(request) {
 
     // Analisis Paket & Kelengkapan RAR
     const rarParts = allFiles.filter((f) => f.category === 'rar_part')
+
+    // ── Cek Part Sibling di Parent Directory (jika di dalam folder tidak ada part) ──
+    if (rarParts.length === 0 && stat.isDirectory()) {
+      try {
+        const parentDir = path.dirname(targetPath)
+        const baseItemName = path.basename(targetPath)
+        const escaped = baseItemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const itemRegex = new RegExp(`^${escaped}(\\.part\\d+)?\\.(rar|7z|zip|r\\d+)$`, 'i')
+        const normItem = baseItemName.toLowerCase().replace(/[-_.\s+]+/g, '')
+
+        const parentItems = fs.readdirSync(parentDir)
+        for (const item of parentItems) {
+          const itemPath = path.join(parentDir, item)
+          try {
+            const itemStat = fs.statSync(itemPath)
+            if (itemStat.isFile() && /\.(rar|7z|zip|r\d+|part\d+\.rar)$/i.test(item)) {
+              let isMatch = itemRegex.test(item)
+              if (!isMatch) {
+                const fBase = item.replace(/\.part\d+\.(rar|7z|zip)$/i, '').replace(/\.(rar|7z|zip|r\d+)$/i, '')
+                const normF = fBase.toLowerCase().replace(/[-_.\s+]+/g, '')
+                if (normF === normItem || normF.startsWith(normItem) || normItem.startsWith(normF)) {
+                  isMatch = true
+                }
+              }
+
+              if (isMatch) {
+                const partInfo = parsePartInfo(item)
+                const partObj = {
+                  name: item,
+                  relPath: `../${item}`,
+                  fullPath: itemPath,
+                  size: itemStat.size,
+                  sizeFormatted: formatBytes(itemStat.size),
+                  mtime: itemStat.mtime,
+                  ext: path.extname(item).toLowerCase(),
+                  category: 'rar_part',
+                  isPart: true,
+                  partNumber: partInfo.partNumber,
+                  isDownloading: partInfo.isDownloading,
+                  isSibling: true,
+                  depth: 0
+                }
+                rarParts.push(partObj)
+                allFiles.unshift(partObj)
+              }
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
     const isoFiles = allFiles.filter((f) => f.category === 'iso')
     const setupFiles = allFiles.filter((f) => f.category === 'setup')
     const executables = allFiles.filter((f) => f.category === 'executable')
@@ -272,7 +323,12 @@ export async function GET(request) {
           totalRarSizeFormatted: formatBytes(totalRarSize),
           isSequential: isSequential && missingParts.length === 0,
           missingParts,
-          activeDownloadingParts
+          activeDownloadingParts,
+          partsList: rarParts.map((p) => ({
+            name: p.name,
+            size: p.size,
+            partNumber: p.partNumber,
+          })),
         },
         hasSetupExe: setupFiles.length > 0,
         setupFiles: setupFiles.map((s) => ({

@@ -6,6 +6,10 @@ import Credentials from 'next-auth/providers/credentials'
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 hari (sesi awet di PWA iPhone)
+  },
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -27,18 +31,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
     Credentials({
       id: 'credentials',
-      name: 'PIN Admin Mobile',
+      name: 'Email & PIN Admin Mobile',
       credentials: {
+        email: { label: 'Email Admin', type: 'email' },
         pin: { label: 'PIN Admin', type: 'password' },
       },
       async authorize(credentials) {
-        const correctPin = process.env.ADMIN_PIN || process.env.C2_SECRET_KEY || 'mygameon'
-        if (credentials?.pin && credentials.pin === correctPin) {
+        const adminEmail = (process.env.ADMIN_EMAIL || '').trim().toLowerCase()
+        const correctPin = process.env.ADMIN_PIN || 'mygameon'
+
+        const inputEmail = (credentials?.email || '').trim().toLowerCase()
+        const inputPin = credentials?.pin || ''
+
+        // Validasi ganda: Wajib Email Admin DAN PIN Admin cocok
+        if (
+          adminEmail &&
+          inputEmail === adminEmail &&
+          inputPin === correctPin
+        ) {
           return {
             id: 'admin_mobile',
             name: 'Administrator (Mobile)',
-            email: process.env.ADMIN_EMAIL || 'admin@mygameon.store',
-            image: '/icons/icon-192.png',
+            email: process.env.ADMIN_EMAIL,
+            image: '/brand/AMON_Shopee_Avatar_Circular_TransparentCorner.png',
           }
         }
         return null
@@ -54,10 +69,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return user.email === process.env.ADMIN_EMAIL
     },
     async jwt({ token, user, account }) {
-      if (account?.provider === 'credentials') {
-        token.accessToken = token.accessToken || null
+      if (user) {
         token.email = user.email
         token.name = user.name
+        token.picture = user.image
+      }
+
+      if (account?.provider === 'credentials') {
+        token.accessToken = token.accessToken || null
         return token
       }
 
@@ -95,11 +114,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token
     },
     async session({ session, token }) {
+      session.user = session.user || {}
       if (token.email) session.user.email = token.email
       if (token.name) session.user.name = token.name
+      if (token.picture) session.user.image = token.picture
       session.accessToken = token.accessToken
       session.error = token.error
       return session
+    },
+    async redirect({ url, baseUrl }) {
+      // Selalu izinkan path relatif agar diarahkan ke origin aktif (baik domain tunnel atau LAN)
+      if (url.startsWith('/')) return url
+      try {
+        const u = new URL(url)
+        // Hindari redirect ke internal host 0.0.0.0
+        if (u.hostname !== '0.0.0.0' && u.hostname !== '127.0.0.1') return url
+      } catch (_) {}
+      return '/'
     },
   },
 

@@ -90,65 +90,66 @@ export async function PATCH(request) {
     const sheetId = process.env.GSHEET_SIMS4_ID
     await connectToDatabase()
 
-    // Update di MongoDB dulu
-    let dbUpdate = {}
-
-    // Ambil baris dari Sheets
-    const res = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: 'Licenses!A:G',
-    })
-
-    const rows = res.data.values || []
-    const rowIndex = rows.findIndex(row => row[0] === invoice)
-
-    if (rowIndex === -1) {
-      return NextResponse.json({ error: 'Lisensi tidak ditemukan di Sheets' }, { status: 404 })
+    // Cari lisensi di MongoDB (Ground Truth)
+    const lic = await Sims4License.findOne({ invoice })
+    if (!lic) {
+      return NextResponse.json({ error: 'Lisensi tidak ditemukan di database' }, { status: 404 })
     }
 
-    // Kolom: A=invoice, B=hwid, C=?, D=cc, E=status, F=email, G=createdAt
-    const sheetRow = rowIndex + 1
-
+    let dbUpdate = {}
     if (action === 'resetHwid') {
-      dbUpdate = { hwid: '' }
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: sheetId,
-        range: `Licenses!B${sheetRow}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['']] },
-      })
+      dbUpdate = { hwid: '', hwids: [] }
     } else if (action === 'toggleCC') {
-      const currentCC = rows[rowIndex][3] || 'N'
-      const newCC = currentCC === 'Y' ? 'N' : 'Y'
-      dbUpdate = { cc: newCC }
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: sheetId,
-        range: `Licenses!D${sheetRow}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[newCC]] },
-      })
+      dbUpdate = { cc: lic.cc === 'Y' ? 'N' : 'Y' }
     } else if (action === 'ban') {
       dbUpdate = { status: 'Banned' }
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: sheetId,
-        range: `Licenses!E${sheetRow}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['Banned']] },
-      })
     } else if (action === 'unban') {
       dbUpdate = { status: 'Active' }
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: sheetId,
-        range: `Licenses!E${sheetRow}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [['Active']] },
-      })
     } else {
       return NextResponse.json({ error: 'Action tidak valid' }, { status: 400 })
     }
 
-    // Terapkan ke MongoDB
+    // 1. Terapkan langsung ke MongoDB (Ground Truth)
     await Sims4License.findOneAndUpdate({ invoice }, { $set: dbUpdate })
+
+    // 2. Dual-write ke Sheets secara non-blocking
+    if (sheetId) {
+      try {
+        const res = await sheets.spreadsheets.values.get({
+          spreadsheetId: sheetId,
+          range: 'Licenses!A:G',
+        })
+        const rows = res.data.values || []
+        const rowIndex = rows.findIndex(row => row[0] === invoice)
+        if (rowIndex !== -1) {
+          const sheetRow = rowIndex + 1
+          if (action === 'resetHwid') {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: sheetId,
+              range: `Licenses!B${sheetRow}`,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [['']] },
+            })
+          } else if (action === 'toggleCC') {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: sheetId,
+              range: `Licenses!D${sheetRow}`,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [[dbUpdate.cc]] },
+            })
+          } else if (action === 'ban' || action === 'unban') {
+            await sheets.spreadsheets.values.update({
+              spreadsheetId: sheetId,
+              range: `Licenses!E${sheetRow}`,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: { values: [[dbUpdate.status]] },
+            })
+          }
+        }
+      } catch (sheetErr) {
+        console.warn('[sims4/licenses PATCH] Gagal update Google Sheets:', sheetErr.message)
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (err) {

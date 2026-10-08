@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import { NextResponse } from 'next/server'
 import { auth } from '@/app/api/auth/[...nextauth]/route'
 import {
@@ -76,8 +78,10 @@ export async function POST(request) {
         const { folderName, targetDir, userName } = body
         if (!folderName) return NextResponse.json({ error: 'folderName diperlukan' }, { status: 400 })
         const config = getDownloadConfig()
+        const downloadDir = config.downloadDir || 'D:\\Game\\Shopee\\GameDownload'
         const uploadDir = config.uploadDir || 'D:\\Game\\Shopee\\GameUpload'
         const pipeline = runAutoInstallPipeline({
+          downloadDir,
           uploadDir,
           folderName,
           customTargetDir: targetDir,
@@ -92,6 +96,32 @@ export async function POST(request) {
         const pipeline = getPipelineSession(pipelineId)
         if (!pipeline) return NextResponse.json({ error: 'Pipeline tidak ditemukan' }, { status: 404 })
         return NextResponse.json({ success: true, pipeline })
+      }
+
+      case 'delete_raw_folder': {
+        const { folderName } = body
+        if (!folderName) return NextResponse.json({ error: 'folderName diperlukan' }, { status: 400 })
+        const config = getDownloadConfig()
+        const downloadDir = config.downloadDir || 'D:\\Game\\Shopee\\GameDownload'
+        const targetPath = path.join(downloadDir, folderName)
+
+        // Validasi path traversal
+        const resolvedBase = path.resolve(downloadDir).toLowerCase()
+        const resolvedTarget = path.resolve(targetPath).toLowerCase()
+        if (!resolvedTarget.startsWith(resolvedBase) || resolvedTarget === resolvedBase) {
+          return NextResponse.json({ error: 'Akses folder tidak diizinkan' }, { status: 403 })
+        }
+
+        if (!fs.existsSync(targetPath)) {
+          return NextResponse.json({ error: 'Folder tidak ditemukan' }, { status: 404 })
+        }
+
+        try {
+          fs.rmSync(targetPath, { recursive: true, force: true })
+          return NextResponse.json({ success: true, message: `Folder mentahan ${folderName} berhasil dihapus.` })
+        } catch (err) {
+          return NextResponse.json({ error: `Gagal menghapus folder: ${err.message}` }, { status: 500 })
+        }
       }
 
       default:

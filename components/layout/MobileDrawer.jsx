@@ -3,45 +3,38 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut } from 'next-auth/react'
+import { signOut, useSession } from 'next-auth/react'
 import {
   Gamepad2, X, Grid2X2, Sparkles, Search, Users,
   KeyRound, DownloadCloud, Folder, Cloud, Clock,
-  Settings, LogOut, ChevronRight, Smartphone, ShieldCheck
+  Settings, LogOut, ChevronRight, Smartphone, ShieldCheck, ShoppingCart
 } from 'lucide-react'
 
 const navSections = [
   {
-    title: 'General Games',
+    title: 'Operasional Toko',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard', desc: 'Ringkasan penjualan & analitik' },
-      { href: '/studio', icon: Gamepad2, label: 'Meja Kerja Game', desc: 'Ekstraksi ISO, WinRAR & Upload', highlight: true },
-      { href: '/download', icon: DownloadCloud, label: 'Download Hub', desc: 'Monitoring download aktif', highlight: true },
+      { href: '/workbench', icon: Gamepad2, label: 'Meja Kerja Game', desc: 'Ekstraksi ISO, WinRAR & Upload', highlight: true },
       { href: '/scout', icon: Sparkles, label: 'Listing Studio', desc: 'Katalog rilis game baru' },
-      { href: '/search', icon: Search, label: 'Cari Game', desc: 'Cari game & periksa aset' },
-      { href: '/revoke', icon: Users, label: 'CRM Pelanggan', desc: 'Kelola akses pembeli' },
-    ],
-  },
-  {
-    title: 'The Sims 4',
-    items: [
-      { href: '/sims4/order', icon: Sparkles, label: 'Order Baru Sims 4', desc: 'Generate lisensi & link' },
-      { href: '/sims4/licenses', icon: KeyRound, label: 'Kelola Lisensi', desc: 'Cek HWID & status user' },
+      { href: '/search', icon: ShoppingCart, label: 'Katalog & Kasir Game', desc: 'Kasir belanja PC & The Sims 4' },
+      { href: '/revoke', icon: Users, label: 'CRM & Lisensi', desc: 'Kelola akses drive & lisensi Sims 4' },
     ],
   },
   {
     title: 'Workspace & Server',
     items: [
+      { href: '/download', icon: DownloadCloud, label: 'Download Hub', desc: 'Monitoring download aktif', highlight: true },
       { href: '/files', icon: Folder, label: 'File Manager', desc: 'Jelajah file drive & workspace' },
-      { href: '/drive-status', icon: Cloud, label: 'Status Google Drive', desc: 'Monitoring kuota drive' },
+      { href: '/accounts', icon: Cloud, label: 'Drive & Workspace', desc: 'Kapasitas, status limit & akun' },
       { href: '/log', icon: Clock, label: 'Log Transaksi', desc: 'Riwayat pengiriman game' },
-      { href: '/accounts', icon: Settings, label: 'Pengaturan Akun', desc: 'Kelola token & Google API' },
     ],
   },
 ]
 
 export default function MobileDrawer({ isOpen, onClose }) {
   const pathname = usePathname()
+  const { data: session } = useSession()
 
   // Tutup drawer saat rute berpindah
   useEffect(() => {
@@ -76,9 +69,11 @@ export default function MobileDrawer({ isOpen, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10 bg-black/20">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-amber-500 text-black shadow-md shadow-amber-500/20">
-              <Gamepad2 size={18} strokeWidth={2.5} />
-            </div>
+            <img
+              src="/brand/AMON_Shopee_Avatar_Circular_TransparentCorner.png"
+              alt="MyGameON"
+              className="h-8 w-8 shrink-0 object-contain drop-shadow-xs"
+            />
             <div>
               <span className="text-sm font-black text-white block tracking-tight uppercase">
                 MyGameON
@@ -151,6 +146,16 @@ export default function MobileDrawer({ isOpen, onClose }) {
 
         {/* Footer */}
         <div className="p-3 border-t border-white/10 bg-black/40 space-y-2">
+          {session?.user && (
+            <div className="px-1 py-1 text-left">
+              <span className="text-[11px] font-bold text-white block truncate">
+                {session.user.name || 'Administrator'}
+              </span>
+              <span className="text-[10px] font-mono text-emerald-400 block truncate font-medium">
+                {session.user.email}
+              </span>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: '/login' })}

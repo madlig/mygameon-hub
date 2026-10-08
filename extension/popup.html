@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>MyGameON Download Catcher</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --card: #18181b;
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      font-size: 12px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: -0.3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge {
+      font-size: 9px;
+      font-weight: 800;
+      text-transform: uppercase;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .dot.online {
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+    .dot.offline {
+      background: var(--red);
+      box-shadow: 0 0 8px var(--red);
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 36px;
+      height: 20px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #3f3f46;
+      transition: .2s;
+      border-radius: 20px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .2s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: var(--emerald);
+    }
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
+    .field-group {
+      margin-bottom: 12px;
+    }
+    .label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: block;
+      text-transform: uppercase;
+    }
+    .input-box {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-family: monospace;
+      outline: none;
+    }
+    .input-box:focus {
+      border-color: var(--emerald);
+    }
+    .info-list {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .info-list strong {
+      color: var(--text);
+    }
+    .btn-action {
+      width: 100%;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: black;
+      font-weight: 800;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: opacity 0.2s;
+    }
+    .btn-action:hover {
+      opacity: 0.9;
+    }
+    .btn-secondary {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 10px;
+      margin-top: 6px;
+      text-align: center;
+      text-decoration: none;
+      display: block;
+    }
+    .btn-secondary:hover {
+      color: var(--text);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .save-alert {
+      font-size: 10px;
+      color: var(--emerald);
+      text-align: center;
+      margin-top: 6px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">
+      <span>⚡ MyGameON</span>
+      <span class="badge">Eksklusif</span>
+    </div>
+    <span style="font-size: 10px; color: var(--text-muted);">v1.0.0</span>
+  </div>
+
+  <div class="status-card">
+    <div class="status-indicator">
+      <div id="statusDot" class="dot"></div>
+      <div>
+        <div id="statusText" style="font-weight: 700; font-size: 11px;">Memeriksa Hub...</div>
+        <div id="jdStatus" style="font-size: 10px; color: var(--text-muted);">JDownloader 2: --</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toggle-row">
+    <div>
+      <div style="font-weight: 700; font-size: 11px;">Tangkap Download Otomatis</div>
+      <div style="font-size: 10px; color: var(--text-muted);">Cegah download browser & alihkan ke JD2</div>
+    </div>
+    <label class="switch">
+      <input type="checkbox" id="toggleEnabled" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="field-group">
+    <label class="label">Kunci Rahasia Eksklusif (Secret Key):</label>
+    <input type="password" id="inputSecretKey" class="input-box" placeholder="Kunci rahasia API...">
+  </div>
+
+  <div class="info-list">
+    <div>📁 Target: <strong>D:\Game\Shopee\GameDownload</strong></div>
+    <div>🎯 Format: <strong>.rar, .zip, .7z, .iso, .exe, .bin</strong></div>
+    <div>🛡️ Proteksi: <strong>Cookie & Referer diteruskan otomatis</strong></div>
+  </div>
+
+  <button id="btnSave" class="btn-action">Simpan Pengaturan</button>
+  <div id="saveAlert" class="save-alert">✓ Pengaturan berhasil disimpan</div>
+
+  <a href="http://localhost:3000/download" target="_blank" class="btn-secondary">
+    Buka Dashboard Download Hub ↗
+  </a>
+
+  <script src="popup.js"></script>
+</body>
+</html>

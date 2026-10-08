@@ -33,7 +33,7 @@ export async function POST(req) {
     }
 
     // 2. Hapus dari database GameCatalog
-    const deleted = await GameCatalog.deleteOne({ folderId, ownerEmail: email });
+    const deleted = await GameCatalog.deleteOne({ folderId });
 
     return NextResponse.json({
       success: true,

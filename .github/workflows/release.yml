@@ -41,6 +41,6 @@ jobs:
       - name: Ensure Setup.exe is Uploaded to Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/squirrel-windows/*.exe
+          files: dist-build/MyGameON Studio Setup*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

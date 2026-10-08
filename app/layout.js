@@ -48,7 +48,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id" className={`dark ${jakarta.variable} ${bricolage.variable} ${geistMono.variable}`}>
+    <html lang="id" suppressHydrationWarning className={`dark ${jakarta.variable} ${bricolage.variable} ${geistMono.variable}`}>
       <head>
         <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
@@ -58,6 +58,7 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body
+        suppressHydrationWarning
         data-density="comfortable"
         data-sb="expanded"
         className="min-h-full flex flex-col font-sans antialiased text-[var(--text)] selection:bg-[var(--primary)] selection:text-black"

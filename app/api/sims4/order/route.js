@@ -2,55 +2,101 @@ import { NextResponse } from 'next/server'
 import { getGoogleClients } from '@/lib/googleClient'
 import connectToDatabase from '@/lib/db'
 import Sims4License from '@/models/Sims4License'
+import Order from '@/models/Order'
+import Customer from '@/models/Customer'
+import AccessLog from '@/models/AccessLog'
 
 export async function POST(request) {
   try {
     const { mode = 'email', email, invoice, allowCC } = await request.json()
 
-    if (!invoice) {
-      return NextResponse.json({ error: 'Kode pesanan wajib diisi' }, { status: 400 })
+    if (!invoice || !invoice.trim()) {
+      return NextResponse.json({ error: 'Kode pesanan (invoice) wajib diisi' }, { status: 400 })
+    }
+
+    const cleanInvoice = invoice.trim()
+    const cleanEmail = email ? email.toLowerCase().trim() : ''
+
+    await connectToDatabase()
+
+    // 1. Cek duplikasi invoice (Cegah E11000 duplicate key crash)
+    const existing = await Sims4License.findOne({ invoice: cleanInvoice })
+    if (existing) {
+      return NextResponse.json({ error: `Kode pesanan '${cleanInvoice}' sudah terdaftar sebagai lisensi The Sims 4 aktif.` }, { status: 409 })
+    }
+
+    // 2. Cek status blacklist customer jika email ada
+    if (cleanEmail) {
+      const customer = await Customer.findOne({ email: cleanEmail })
+      if (customer?.status === 'blacklisted') {
+        return NextResponse.json({ error: 'Akses ditolak: Email pelanggan telah diblokir permanen (Blacklisted).' }, { status: 403 })
+      }
     }
 
     const { drive, gmail, sheets } = await getGoogleClients()
     const folderId = process.env.SIMS4_FOLDER_ID
     const sheetId = process.env.GSHEET_SIMS4_ID
     const ccVal = allowCC ? 'Y' : 'N'
+    const createdAt = new Date()
 
     // ── Mode "Lisensi saja" — tanpa share Drive & tanpa kirim email ──
-    // Pembeli download launcher dari mygameon.store dan aktivasi pakai
-    // License Key (= invoice). Email opsional, hanya untuk arsip.
     if (mode === 'license') {
-      await connectToDatabase()
-      const createdAt = new Date()
-      
-      // Simpan ke MongoDB
+      // 1. Simpan lisensi ke MongoDB (Ground Truth)
       await Sims4License.create({
-        invoice,
+        invoice: cleanInvoice,
         hwid: '',
+        hwids: [],
         cc: ccVal,
         status: 'Active',
-        email: email || '',
+        email: cleanEmail,
         createdAt
       })
 
-      // Simpan ke Sheets (Dual Write)
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: sheetId,
-        range: 'Licenses!A:G',
-        valueInputOption: 'RAW',
-        requestBody: {
-          values: [[invoice, '', '', ccVal, 'Active', email || '', createdAt.toISOString()]],
-        },
-      })
+      // 2. Simpan catatan ke Order MongoDB
+      try {
+        await Order.create({
+          email: cleanEmail,
+          invoice: cleanInvoice,
+          cartItems: [{
+            name: 'The Sims 4',
+            targetId: folderId || '',
+            ownerEmail: process.env.ADMIN_EMAIL || 'mygameon',
+            isBonus: false,
+            isSims4: true,
+            allowCC: !!allowCC
+          }],
+          bonusEligible: 0,
+          bonusClaimed: 0
+        })
+      } catch (orderErr) {
+        console.warn('Sims 4 license-only order log warning:', orderErr.message)
+      }
+
+      // 3. Simpan ke Sheets (Dual Write Non-blocking)
+      if (sheetId && sheets) {
+        try {
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: sheetId,
+            range: 'Licenses!A:G',
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: [[cleanInvoice, '', '', ccVal, 'Active', cleanEmail, createdAt.toISOString()]],
+            },
+          })
+        } catch (sheetErr) {
+          console.warn('Sims 4 Sheet log warning:', sheetErr.message)
+        }
+      }
+
       return NextResponse.json({ success: true, mode: 'license' })
     }
 
-    // ── Mode "Kirim via Email" (default) — perilaku lama ──
-    if (!email) {
-      return NextResponse.json({ error: 'Email wajib diisi' }, { status: 400 })
+    // ── Mode "Kirim via Email" ──
+    if (!cleanEmail) {
+      return NextResponse.json({ error: 'Email pembeli wajib diisi untuk mode kirim via email' }, { status: 400 })
     }
 
-    // Resolve shortcut
+    // Resolve shortcut jika folderId berupa Google Apps Shortcut
     let realFolderId = folderId
     try {
       const f = await drive.files.get({
@@ -61,9 +107,9 @@ export async function POST(request) {
       if (f.data.mimeType === 'application/vnd.google-apps.shortcut') {
         realFolderId = f.data.shortcutDetails.targetId
       }
-    } catch (e) {}
+    } catch (_) {}
 
-    // Share akses ke folder Sims 4
+    // Share akses folder Sims 4 di Google Drive
     await drive.permissions.create({
       fileId: realFolderId,
       supportsAllDrives: true,
@@ -71,33 +117,87 @@ export async function POST(request) {
       requestBody: {
         role: 'reader',
         type: 'user',
-        emailAddress: email,
+        emailAddress: cleanEmail,
       },
     })
 
-    // Catat ke MongoDB & Spreadsheet Sims 4 (Dual Write)
-    await connectToDatabase()
-    const createdAt = new Date()
-    
+    // Catat ke MongoDB Sims4License (Ground Truth)
     await Sims4License.create({
-      invoice,
+      invoice: cleanInvoice,
       hwid: '',
+      hwids: [],
       cc: ccVal,
       status: 'Active',
-      email,
+      email: cleanEmail,
       createdAt
     })
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: sheetId,
-      range: 'Licenses!A:G',
-      valueInputOption: 'RAW',
-      requestBody: {
-        values: [[invoice, '', '', ccVal, 'Active', email, createdAt.toISOString()]],
-      },
-    })
+    // Catat ke Order MongoDB
+    try {
+      await Order.create({
+        email: cleanEmail,
+        invoice: cleanInvoice,
+        cartItems: [{
+          name: 'The Sims 4',
+          targetId: realFolderId,
+          ownerEmail: process.env.ADMIN_EMAIL || 'mygameon',
+          isBonus: false,
+          isSims4: true,
+          allowCC: !!allowCC
+        }],
+        bonusEligible: 0,
+        bonusClaimed: 0
+      })
+    } catch (orderErr) {
+      console.warn('Sims 4 Order create warning:', orderErr.message)
+    }
 
-    // Kirim email ke pembeli
+    // Update Customer MongoDB
+    try {
+      await Customer.findOneAndUpdate(
+        { email: cleanEmail },
+        {
+          $inc: { orderCount: 1 },
+          $setOnInsert: { status: 'active', createdAt: new Date() }
+        },
+        { upsert: true }
+      )
+    } catch (custErr) {
+      console.warn('Customer update warning:', custErr.message)
+    }
+
+    // Catat riwayat akses ke AccessLog
+    try {
+      await AccessLog.create({
+        email: cleanEmail,
+        gameName: 'The Sims 4',
+        folderId: realFolderId,
+        permissionId: '',
+        ownerEmail: process.env.ADMIN_EMAIL || 'mygameon',
+        isBonus: false,
+        expiresAt: null
+      })
+    } catch (logErr) {
+      console.warn('AccessLog warning:', logErr.message)
+    }
+
+    // Dual-write ke Google Sheets Sims 4 (Non-blocking)
+    if (sheetId && sheets) {
+      try {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: sheetId,
+          range: 'Licenses!A:G',
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: [[cleanInvoice, '', '', ccVal, 'Active', cleanEmail, createdAt.toISOString()]],
+          },
+        })
+      } catch (sheetErr) {
+        console.warn('Sims 4 Sheet log warning:', sheetErr.message)
+      }
+    }
+
+    // Kirim email konfirmasi ke pembeli via Gmail
     const driveLink = `https://drive.google.com/drive/folders/${realFolderId}`
     const variantName = allowCC ? 'PREMIUM (Full Mods/CC)' : 'STANDARD (Game Only)'
 
@@ -113,7 +213,7 @@ export async function POST(request) {
           <div style="background:#fff9db;border-left:5px solid #FFD700;padding:15px;margin:25px 0;border-radius:4px;">
             <table style="width:100%;">
               <tr><td style="font-weight:bold;color:#555;padding-bottom:5px;">🧾 Password Extract:</td><td style="font-weight:bold;">mygameonlauncher</td></tr>
-              <tr><td style="font-weight:bold;color:#555;padding-bottom:5px;">🔑 License Key:</td><td style="font-weight:bold;">${invoice}</td></tr>
+              <tr><td style="font-weight:bold;color:#555;padding-bottom:5px;">🔑 License Key:</td><td style="font-weight:bold;">${cleanInvoice}</td></tr>
               <tr><td style="font-weight:bold;color:#555;">📦 Tipe Paket:</td><td style="font-weight:bold;">${variantName}</td></tr>
             </table>
           </div>
@@ -133,7 +233,7 @@ export async function POST(request) {
     `
 
     const rawMessage = [
-      `To: ${email}`,
+      `To: ${cleanEmail}`,
       `Subject: MyGameON | Pengiriman Akses Download The Sims 4`,
       'Content-Type: text/html; charset=utf-8',
       '',

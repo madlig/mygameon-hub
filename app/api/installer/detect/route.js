@@ -18,9 +18,10 @@ export async function GET(request) {
     }
 
     const config = getDownloadConfig()
+    const downloadDir = config.downloadDir || 'D:\\Game\\Shopee\\GameDownload'
     const uploadDir = config.uploadDir || 'D:\\Game\\Shopee\\GameUpload'
 
-    const info = detectGameInstallSetup(uploadDir, folderName)
+    const info = detectGameInstallSetup(folderName, { downloadDir, uploadDir })
     return NextResponse.json({ success: true, data: info })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })

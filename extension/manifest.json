@@ -1,0 +1,40 @@
+{
+  "manifest_version": 2,
+  "name": "MyGameON Download Catcher",
+  "version": "1.0.0",
+  "description": "Ekstensi penangkap download eksklusif MyGameON Hub untuk Firefox.",
+  "author": "MyGameON Studio",
+  "permissions": [
+    "downloads",
+    "cookies",
+    "tabs",
+    "notifications",
+    "storage",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3000/*",
+    "<all_urls>"
+  ],
+  "browser_action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "MyGameON Download Catcher",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "catcher@mygameon.store",
+      "strict_min_version": "100.0"
+    }
+  }
+}

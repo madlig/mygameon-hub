@@ -322,6 +322,7 @@ export async function POST(request) {
       try {
         await Order.create({
           email,
+          invoice: rawInvoice || '',
           cartItems: processedItems.map(p => ({
             name: p.name,
             targetId: p.folderId,

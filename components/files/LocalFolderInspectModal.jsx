@@ -125,7 +125,7 @@ export default function LocalFolderInspectModal({
       executable: data.files.filter((f) => f.category === 'executable' || f.category === 'setup').length,
       subfolders: data.subfolders?.length || 0
     }
-  }, [data?.files, data?.subfolders])
+  }, [data])
 
   if (!isOpen) return null
 
@@ -514,7 +514,19 @@ export default function LocalFolderInspectModal({
           </div>
 
           <div className="flex items-center justify-end gap-2">
-            {onHandoff && (
+            {summary?.hasIso && onLaunchWizard ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onLaunchWizard(folder?.name || folderName)
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2 text-xs font-black text-black hover:brightness-110 shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+              >
+                <Play size={13} />
+                <span>💿 Pasang Game ke Studio</span>
+              </button>
+            ) : onHandoff ? (
               <button
                 type="button"
                 onClick={() => {
@@ -526,7 +538,7 @@ export default function LocalFolderInspectModal({
                 <Zap size={13} />
                 <span>🚀 Oper ke Upload Studio</span>
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               onClick={onClose}

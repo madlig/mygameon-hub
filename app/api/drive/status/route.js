@@ -51,6 +51,7 @@ export async function GET() {
             email: acc.email,
             status: 'ok',
             reason: '',
+            storage: { usageGB: '0.00', limitGB: 1024, percentage: 0 },
             allFiles: [],
           })
           return
@@ -110,6 +111,15 @@ export async function GET() {
           storageInfo = { usageGB, limitGB, percentage }
         } catch (storageErr) {
           // Abaikan error storage agar tidak memblokir fungsionalitas lain
+        }
+
+        // Fallback ke GameCatalog Ground Truth jika files.list gagal atau nol
+        if (!storageInfo || parseFloat(storageInfo.usageGB) === 0) {
+          const catalogBytes = games.reduce((acc, g) => acc + (g.totalSize || 0), 0)
+          const usageGB = (catalogBytes / (1024 ** 3)).toFixed(2)
+          const limitGB = 1024
+          const percentage = Math.min(100, Math.round((catalogBytes / (limitGB * (1024 ** 3))) * 100))
+          storageInfo = { usageGB, limitGB, percentage }
         }
 
         try {

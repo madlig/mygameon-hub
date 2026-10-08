@@ -38,8 +38,8 @@ export async function GET(request) {
       { $group: {
           _id: { $toLower: "$name" },
           name: { $first: "$name" },
-          totalSize: { $first: "$totalSize" },
-          fileCount: { $first: "$fileCount" },
+          totalSize: { $max: "$totalSize" },
+          fileCount: { $max: "$fileCount" },
           sources: { $push: { folderId: "$folderId", ownerEmail: "$ownerEmail", sendCount: { $ifNull: ["$sendCount", 0] } } }
         }
       },

@@ -41,6 +41,7 @@ export async function POST(request) {
 
     const {
       folderPath,
+      targetFilePath,
       targetEmail,
       config,
       action = 'upload',
@@ -50,6 +51,10 @@ export async function POST(request) {
       gameName,
       customTitle,
       cleanReplace,
+      resume,
+      forceWipeExisting,
+      selectedParts,
+      fileVersion,
     } = await request.json()
     if (!folderPath) {
       return NextResponse.json({ error: 'Folder Path tidak lengkap' }, { status: 400 })
@@ -86,7 +91,8 @@ export async function POST(request) {
 
       // Jalankan asinkron tanpa menahan response HTTP
       if (action === 'extract') {
-        extractJob(folderPath).catch((err) => {
+        const pathToExtract = targetFilePath && fs.existsSync(targetFilePath) ? targetFilePath : folderPath
+        extractJob(pathToExtract).catch((err) => {
           console.error('Local extractJob failed:', err)
         })
       } else if (action === 'archive') {
@@ -104,6 +110,7 @@ export async function POST(request) {
             customTitle: customTitle || cleanGameName || gameName || null,
             cleanReplace: cleanReplace !== false,
             forceArchive: true,
+            fileVersion: fileVersion || '',
           })
         })().catch((err) => {
           console.error('Local extract_and_upload failed:', err)
@@ -117,6 +124,10 @@ export async function POST(request) {
           gameName: customTitle || gameName || null,
           customTitle: customTitle || gameName || null,
           cleanReplace: cleanReplace !== false,
+          resume: resume !== false,
+          forceWipeExisting: !!forceWipeExisting,
+          selectedParts: Array.isArray(selectedParts) ? selectedParts : null,
+          fileVersion: fileVersion || '',
         }).catch((err) => {
           console.error('Local uploadJob failed:', err)
         })
@@ -154,6 +165,9 @@ export async function POST(request) {
           gameName: customTitle || gameName || null,
           customTitle: customTitle || gameName || null,
           cleanReplace: cleanReplace !== false,
+          resume: resume !== false,
+          forceWipeExisting: !!forceWipeExisting,
+          selectedParts: Array.isArray(selectedParts) ? selectedParts : null,
         },
       },
     })

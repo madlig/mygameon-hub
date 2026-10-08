@@ -43,7 +43,13 @@ Lewati planning dan langsung kerja untuk:
    - Mengidentifikasi file-file yang akan terpengaruh
    - Membaca konvensi coding yang dipakai
 
-4. **Ajukan pertanyaan klarifikasi** — Jika ada sesuatu yang tidak jelas, **tanyakan ke user** daripada mengasumsikan. Gunakan format pertanyaan yang spesifik dengan opsi yang jelas.
+4. **Untuk task UI/UX**: Jawab 3 pertanyaan ini sebelum lanjut ke Fase 2:
+   - Apa aksi utama yang user ingin lakukan di halaman/komponen ini?
+   - Informasi apa yang user butuhkan sebelum bisa bertindak?
+   - Apa yang terjadi setelah user bertindak — bagaimana success/error state terlihat?
+   Baca `skills/ui-ux-principles.md` untuk detail lengkap.
+
+5. **Ajukan pertanyaan klarifikasi** — Jika ada sesuatu yang tidak jelas, **tanyakan ke user** daripada mengasumsikan. Gunakan format pertanyaan yang spesifik dengan opsi yang jelas.
 
 ### Aturan Eksplorasi Paralel
 

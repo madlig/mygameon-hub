@@ -6,6 +6,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # MyGameON Studio Hub — Workspace Context & Memory
 
+## Dokumentasi Master (Wajib Diikuti)
+- **[ANTIGRAVITY.md](ANTIGRAVITY.md)** — Panduan ekosistem AI Coding Assistant & aturan operasional workspace.
+- **[CODING_CONVENTIONS.md](CODING_CONVENTIONS.md)** — Aturan baku & pola penulisan kode (Next.js App Router, React 19, Tailwind CSS v4, Mongoose, IPC Electron, Do & Don't).
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — Arsitektur teknis lengkap (Dual-Process Electron, pipeline state machine, Google Drive multi-workspace, background jobs).
+
+---
+
 ## 1. Aturan Model Gemini AI (KRITIS - JANGAN DIUBAH)
 - **Model yang Digunakan**: Selalu gunakan `gemini-3.6-flash` (atau `process.env.GEMINI_MODEL`).
 - **DILARANG KERAS**: Mengubah model ke `gemini-2.5-flash` atau versi lama lainnya. Versi 2.5 flash sudah tidak kompatibel / tidak berfungsi di environment ini dan akan menyebabkan error runtime.
@@ -14,4 +21,4 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Sumber Ground Truth Utama**: Seluruh file game yang dimiliki secara nyata berada di **Google Drive multi-workspace** (`GameCatalog` di MongoDB yang disinkronkan dari folder Google Drive).
 - Jika sebuah game belum ada filenya di Google Drive, game tersebut **bukan** barang siap kirim.
 - Integrasi ke etalase Website (`mygameonapp` Firestore) hanya mempublikasikan game yang **sudah pasti ada filenya di Google Drive**, diperkaya dengan metadata display (RAWG/Steam) agar calon pembeli di website bisa melihat detail spesifikasi dan memesan game yang memang tersedia.
-
+- Nilai `totalSize` di database adalah byte riil hasil scan Google Drive, dilarang ditimpa oleh data Steam.

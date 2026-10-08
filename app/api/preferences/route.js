@@ -42,6 +42,7 @@ export async function POST(req) {
     if (data.recentGames !== undefined) updateData.recentGames = data.recentGames;
     if (data.favGames !== undefined) updateData.favGames = data.favGames;
     if (data.bundles !== undefined) updateData.bundles = data.bundles;
+    if (data.listingOutputDir !== undefined) updateData.listingOutputDir = data.listingOutputDir;
 
     const prefs = await UserPreferences.findOneAndUpdate(
       { adminEmail: session.user.email },
@@ -55,3 +56,5 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export const PATCH = POST;

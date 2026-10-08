@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getClientForEmail } from '@/lib/googleClient';
 import { auth } from '@/app/api/auth/[...nextauth]/route';
+import connectToDatabase from '@/lib/db';
+import GameCatalog from '@/models/GameCatalog';
 
 export async function GET(req) {
   try {
@@ -17,16 +19,29 @@ export async function GET(req) {
     }
 
     try {
+      await connectToDatabase();
       const drive = await getClientForEmail(email);
       const about = await drive.about.get({ fields: 'storageQuota' });
       const quota = about.data.storageQuota || {};
       
-      const usageBytes = parseInt(quota.usage || quota.usageInDrive || 0, 10);
-      const limitBytes = quota.limit ? parseInt(quota.limit, 10) : 1024 * (1024 ** 3); // Default 1TB if limit not set
+      const rawLimitBytes = quota.limit ? parseInt(quota.limit, 10) : 0;
+      let limitGB = 1024;
+      if (rawLimitBytes > 0 && rawLimitBytes <= 2048 * (1024 ** 3)) {
+        limitGB = Math.round(rawLimitBytes / (1024 ** 3));
+      }
+
+      let usageBytes = parseInt(quota.usageInDrive || 0, 10);
+      if (usageBytes <= 0 || usageBytes > limitGB * (1024 ** 3)) {
+        // Fallback ke GameCatalog Ground Truth
+        const catRes = await GameCatalog.aggregate([
+          { $match: { ownerEmail: email } },
+          { $group: { _id: null, totalBytes: { $sum: '$totalSize' } } },
+        ]);
+        usageBytes = catRes[0]?.totalBytes || 0;
+      }
       
       const usageGB = (usageBytes / (1024 ** 3)).toFixed(2);
-      const limitGB = Math.round(limitBytes / (1024 ** 3));
-      const percentage = Math.min(100, Math.round((usageBytes / (limitBytes || 1)) * 100));
+      const percentage = Math.min(100, Math.round((usageBytes / (limitGB * (1024 ** 3))) * 100));
 
       return NextResponse.json({ 
         success: true, 

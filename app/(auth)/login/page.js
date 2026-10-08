@@ -8,43 +8,57 @@ import { Gamepad2, Smartphone, KeyRound, Loader2, AlertCircle, ShieldCheck } fro
 function LoginContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const [email, setEmail] = useState('')
   const [pin, setPin] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('pin') // 'pin' | 'google'
 
   useEffect(() => {
+    const emailParam = searchParams.get('email')
     const pinParam = searchParams.get('pin')
-    if (pinParam) {
-      setPin(pinParam)
-      handlePinLogin(pinParam)
+    if (emailParam) setEmail(emailParam)
+    if (pinParam) setPin(pinParam)
+
+    // Jika keduanya disediakan (hasil scan QR Code desktop), langsung trigger login instan
+    if (emailParam && pinParam) {
+      handleLogin(emailParam, pinParam)
     }
   }, [searchParams])
 
-  async function handlePinLogin(pinToUse = pin) {
-    if (!pinToUse) {
+  async function handleLogin(emailToUse = email, pinToUse = pin) {
+    const cleanEmail = (emailToUse || '').trim()
+    const cleanPin = (pinToUse || '').trim()
+
+    if (!cleanEmail) {
+      setError('Masukkan Email Admin')
+      return
+    }
+    if (!cleanPin) {
       setError('Masukkan PIN Admin')
       return
     }
+
     setLoading(true)
     setError('')
 
     try {
       const res = await signIn('credentials', {
-        pin: pinToUse,
+        email: cleanEmail,
+        pin: cleanPin,
         redirect: false,
         callbackUrl: '/'
       })
 
-      if (res?.error) {
-        setError('PIN Admin salah. Silakan periksa PIN di aplikasi desktop.')
+      if (res?.error || (res && !res.ok)) {
+        setError('Email atau PIN Admin salah. Periksa kredensial di aplikasi desktop.')
+        setLoading(false)
       } else {
-        router.push('/')
-        router.refresh()
+        // Gunakan full page navigation agar Safari iOS mem-flush cookie sesi secara sinkron
+        window.location.replace('/')
       }
     } catch (err) {
-      setError(err.message || 'Gagal login dengan PIN')
-    } finally {
+      setError(err.message || 'Gagal login ke studio')
       setLoading(false)
     }
   }
@@ -56,8 +70,12 @@ function LoginContent() {
       <div className="pointer-events-none absolute -bottom-32 -right-24 h-72 w-72 rounded-full bg-[var(--accent)]/25 blur-[120px]" />
 
       <div className="fadeUp relative z-10 mb-6 text-center">
-        <div className="glow-primary mx-auto mb-4 flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl bg-[var(--primary)] text-[var(--primary-fg)] shadow-lg shadow-amber-500/20">
-          <Gamepad2 size={30} strokeWidth={2} />
+        <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-black/40 border border-white/10 p-2 shadow-xl shadow-amber-500/10">
+          <img
+            src="/brand/AMON_Shopee_Avatar_Circular_TransparentCorner.png"
+            alt="MyGameON"
+            className="h-full w-full object-contain"
+          />
         </div>
         <h1 className="brand-wordmark text-2xl sm:text-3xl font-black">
           <span className="gradient-text">MyGameON</span>
@@ -79,7 +97,7 @@ function LoginContent() {
             }`}
           >
             <Smartphone size={13} />
-            <span>PIN HP / Mobile</span>
+            <span>Akses HP / Mobile</span>
           </button>
           <button
             type="button"
@@ -102,12 +120,26 @@ function LoginContent() {
           </div>
         )}
 
-        {/* Tab 1: PIN Login (Ideal for Smartphone) */}
+        {/* Tab 1: Email + PIN Login (Ideal for Smartphone) */}
         {activeTab === 'pin' && (
-          <form onSubmit={(e) => { e.preventDefault(); handlePinLogin() }} className="space-y-3 pt-1">
+          <form onSubmit={(e) => { e.preventDefault(); handleLogin() }} className="space-y-3 pt-1">
             <p className="text-xs text-[var(--text-3)] leading-relaxed text-center">
-              Masukkan PIN Admin untuk mengakses studio &amp; monitoring langsung dari HP Anda.
+              Masukkan Email Admin dan PIN untuk otentikasi ganda dari smartphone Anda.
             </p>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono uppercase text-[var(--text-4)] font-bold block">
+                Email Admin:
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@mygameon.store"
+                autoComplete="email"
+                className="w-full text-xs text-white bg-black/50 px-3 py-2.5 rounded-xl border border-white/15 focus:border-amber-400 focus:outline-none transition-all placeholder:text-[var(--text-4)]"
+              />
+            </div>
 
             <div className="space-y-1.5">
               <label className="text-[10px] font-mono uppercase text-[var(--text-4)] font-bold block">
@@ -117,8 +149,8 @@ function LoginContent() {
                 type="password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
-                placeholder="PIN Admin (default: mygameon)"
-                autoFocus
+                placeholder="PIN Admin"
+                autoComplete="current-password"
                 className="w-full font-mono text-center tracking-widest text-sm text-white bg-black/50 px-3 py-2.5 rounded-xl border border-white/15 focus:border-amber-400 focus:outline-none transition-all placeholder:tracking-normal placeholder:text-xs placeholder:text-[var(--text-4)]"
               />
             </div>
@@ -129,11 +161,11 @@ function LoginContent() {
               className="pressable w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-black font-extrabold text-xs flex items-center justify-center gap-2 hover:from-amber-400 hover:to-amber-300 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
             >
               {loading ? <Loader2 size={16} className="animate-spin text-black" /> : <ShieldCheck size={16} />}
-              <span>Masuk ke Dashboard</span>
+              <span>Masuk ke Dashboard Studio</span>
             </button>
 
             <p className="text-[10px] text-center text-[var(--text-4)] pt-1">
-              💡 Lihat QR Code atau ubah PIN di menu <b>Akses HP</b> aplikasi desktop.
+              💡 Scan QR Code di menu <b>Akses HP</b> aplikasi desktop untuk masuk otomatis 1-tap.
             </p>
           </form>
         )}
