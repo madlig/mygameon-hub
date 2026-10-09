@@ -82,8 +82,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       if (account) {
         token.accessToken = account.access_token
-        token.refreshToken = account.refresh_token
+        token.refreshToken = account.refresh_token || token.refreshToken
         token.expiresAt = account.expires_at
+
+        // Simpan refresh token Google Admin ke MongoDB WorkspaceAccount
+        if (account.refresh_token && user?.email) {
+          try {
+            const connectToDatabase = (await import('@/lib/db')).default
+            const WorkspaceAccount = (await import('@/models/WorkspaceAccount')).default
+            await connectToDatabase()
+            await WorkspaceAccount.findOneAndUpdate(
+              { email: user.email.toLowerCase() },
+              { $set: { refreshToken: account.refresh_token, status: 'active' } },
+              { upsert: true }
+            )
+          } catch (dbErr) {
+            console.warn('[NextAuth] Gagal simpan refreshToken admin ke MongoDB:', dbErr.message)
+          }
+        }
       }
 
       // Cek apakah token expired (hanya untuk provider google)
@@ -119,6 +135,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.name) session.user.name = token.name
       if (token.picture) session.user.image = token.picture
       session.accessToken = token.accessToken
+      session.refreshToken = token.refreshToken
       session.error = token.error
       return session
     },

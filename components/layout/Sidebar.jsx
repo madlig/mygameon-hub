@@ -14,7 +14,7 @@ const navGroups = [
     label: 'Operasional Toko',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard' },
-      { href: '/workbench', icon: Gamepad2, label: 'Meja Kerja Game' },
+      { href: '/workbench', icon: Gamepad2, label: 'Workbench' },
       { href: '/scout', icon: Sparkles, label: 'Listing Studio' },
       { href: '/search', icon: ShoppingCart, label: 'Katalog & Kasir Game' },
       { href: '/revoke', icon: Users, label: 'CRM & Lisensi' },

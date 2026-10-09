@@ -25,7 +25,8 @@
     "electron-squirrel-startup": "^1.0.1",
     "electron-updater": "^6.8.9",
     "googleapis": "^171.4.0",
-    "mongoose": "^9.9.3"
+    "mongoose": "^9.9.3",
+    "nodemailer": "^7.0.13"
   },
   "devDependencies": {
     "@base-ui/react": "^1.4.1",

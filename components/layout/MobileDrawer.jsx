@@ -15,7 +15,7 @@ const navSections = [
     title: 'Operasional Toko',
     items: [
       { href: '/', icon: Grid2X2, label: 'Dashboard', desc: 'Ringkasan penjualan & analitik' },
-      { href: '/workbench', icon: Gamepad2, label: 'Meja Kerja Game', desc: 'Ekstraksi ISO, WinRAR & Upload', highlight: true },
+      { href: '/workbench', icon: Gamepad2, label: 'Workbench', desc: 'Depot upload & persiapan file game', highlight: true },
       { href: '/scout', icon: Sparkles, label: 'Listing Studio', desc: 'Katalog rilis game baru' },
       { href: '/search', icon: ShoppingCart, label: 'Katalog & Kasir Game', desc: 'Kasir belanja PC & The Sims 4' },
       { href: '/revoke', icon: Users, label: 'CRM & Lisensi', desc: 'Kelola akses drive & lisensi Sims 4' },

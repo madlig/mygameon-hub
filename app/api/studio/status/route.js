@@ -73,6 +73,16 @@ export async function GET() {
         }
         setLocalJobState(localState)
       }
+
+      if (localState.status === 'success' || localState.phase === 'done') {
+        localState.overallProgress = 100
+        localState.progress = 100
+        localState.speedMBps = 0
+        localState.etaSeconds = 0
+        if (localState.action === 'archive' && localState.totalParts) {
+          localState.currentPart = localState.totalParts
+        }
+      }
       return NextResponse.json({ success: true, state: localState, ...localState })
     }
 

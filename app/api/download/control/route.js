@@ -191,6 +191,75 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Berkas tidak ditemukan' }, { status: 404 })
     }
 
+    if (action === 'clean_rar_parts') {
+      let folderPath = targetPath || body.folderPath
+      if (!folderPath && body.folderName) {
+        const { getDownloadConfig } = await import('@/lib/downloadWatcher')
+        const config = getDownloadConfig()
+        const downloadDir = config.downloadDir || 'D:\\Game\\Shopee\\GameDownload'
+        folderPath = path.join(downloadDir, body.folderName)
+      }
+
+      if (!folderPath || !fs.existsSync(folderPath)) {
+        return NextResponse.json({ error: 'Folder game tidak ditemukan' }, { status: 404 })
+      }
+
+      let freedBytes = 0
+      const deletedFiles = []
+      const isArchiveFile = (f) => /\.(part\d+\.rar|r\d+|rar|7z|zip)$/i.test(f)
+
+      try {
+        const files = fs.readdirSync(folderPath)
+        // 1. Bersihkan file arsip langsung di root folder game
+        for (const f of files) {
+          const p = path.join(folderPath, f)
+          try {
+            const st = fs.statSync(p)
+            if (st.isFile() && isArchiveFile(f)) {
+              freedBytes += st.size
+              fs.unlinkSync(p)
+              deletedFiles.push(f)
+            }
+          } catch (_) {}
+        }
+
+        // 2. Bersihkan file arsip di subfolder level 1 jika ada
+        for (const f of files) {
+          const p = path.join(folderPath, f)
+          try {
+            const st = fs.statSync(p)
+            if (st.isDirectory()) {
+              const subFiles = fs.readdirSync(p)
+              for (const sf of subFiles) {
+                const sp = path.join(p, sf)
+                try {
+                  const sst = fs.statSync(sp)
+                  if (sst.isFile() && isArchiveFile(sf)) {
+                    freedBytes += sst.size
+                    fs.unlinkSync(sp)
+                    deletedFiles.push(`${f}/${sf}`)
+                  }
+                } catch (_) {}
+              }
+            }
+          } catch (_) {}
+        }
+      } catch (err) {
+        return NextResponse.json({ error: `Gagal membaca folder: ${err.message}` }, { status: 500 })
+      }
+
+      const { formatBytes } = await import('@/lib/utils')
+      return NextResponse.json({
+        success: true,
+        freedBytes,
+        formattedFreed: formatBytes(freedBytes),
+        deletedCount: deletedFiles.length,
+        message: deletedFiles.length > 0
+          ? `Berhasil membersihkan ${deletedFiles.length} file part arsip (${formatBytes(freedBytes)} ruang disk dibebaskan).`
+          : 'Tidak ada berkas part arsip yang ditemukan untuk dibersihkan.'
+      })
+    }
+
     if (action === 'extract_now') {
       let p = targetPath || body.folderPath
       if (!p && body.folderName) {

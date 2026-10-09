@@ -5,7 +5,7 @@ import {
   X, Folder, FolderOpen, FileArchive, Disc, Play, CheckCircle2,
   AlertTriangle, Loader2, HardDrive, Search, Copy, Check,
   ExternalLink, Zap, Package, RefreshCw, FileText, FileCode,
-  ShieldCheck, ArrowRight, Layers
+  ShieldCheck, ArrowRight, Layers, Trash2
 } from 'lucide-react'
 
 function formatBytes(bytes, decimals = 2) {
@@ -24,7 +24,8 @@ export default function LocalFolderInspectModal({
   folderName,
   type = 'download', // 'download' | 'upload'
   onLaunchWizard,
-  onHandoff
+  onHandoff,
+  onCleanRar
 }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -282,12 +283,35 @@ export default function LocalFolderInspectModal({
                       </p>
                     </div>
                   </div>
-                  {rarStats?.activeDownloadingParts > 0 && (
-                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 text-amber-300 shrink-0">
-                      <Loader2 size={11} className="animate-spin" />
-                      <span>{rarStats.activeDownloadingParts} part sedang didownload</span>
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {summary?.hasIso && onCleanRar && rarStats?.partsCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose()
+                          onCleanRar({
+                            folderName: folder?.name || folderName,
+                            fullPath: folder?.path || folderPath,
+                            rarPartsCount: rarStats?.partsCount,
+                            rarSizeFormatted: rarStats?.totalRarSizeFormatted,
+                            mainIsoName: summary.isoFiles?.[0]?.name,
+                            extractedSizeFormatted: formatBytes(summary.isoFiles?.[0]?.size || 0)
+                          })
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/20 hover:bg-amber-500/30 px-3 py-1.5 text-xs font-bold text-amber-300 transition-all cursor-pointer shadow-sm active:scale-95"
+                        title="Hapus part RAR mentah untuk menghemat ruang harddisk"
+                      >
+                        <Trash2 size={12} className="text-amber-400" />
+                        <span>Hapus Part RAR ({rarStats?.totalRarSizeFormatted})</span>
+                      </button>
+                    )}
+                    {rarStats?.activeDownloadingParts > 0 && (
+                      <span className="flex items-center gap-1 text-[10px] font-mono font-bold bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 text-amber-300 shrink-0">
+                        <Loader2 size={11} className="animate-spin" />
+                        <span>{rarStats.activeDownloadingParts} part sedang didownload</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 

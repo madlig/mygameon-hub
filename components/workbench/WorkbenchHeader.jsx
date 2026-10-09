@@ -30,7 +30,7 @@ export default function WorkbenchHeader({
           }`}
         >
           <Gamepad2 size={15} />
-          <span>Meja Kerja Game</span>
+          <span>Workbench</span>
         </button>
 
         <button

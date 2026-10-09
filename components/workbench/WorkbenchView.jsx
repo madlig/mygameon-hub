@@ -330,6 +330,10 @@ export default function WorkbenchView({
               onResetProcessState={onResetProcessState}
               onCleanParts={() => onCleanParts?.(selectedFolder)}
               fileVersion={fileVersion}
+              onProceedToUpload={() => {
+                onResetProcessState?.()
+                fetchFolderContent?.()
+              }}
             />
           )}
 

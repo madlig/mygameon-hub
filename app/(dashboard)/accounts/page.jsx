@@ -8,7 +8,8 @@ import { useToast } from '@/components/ui/Toast'
 import {
   Cloud, HardDrive, CheckCircle2, AlertTriangle, AlertCircle,
   RefreshCw, Plus, Trash2, Edit2, Copy, Folder, Search,
-  ChevronDown, ChevronUp, Loader2, Layers, Info, ExternalLink
+  ChevronDown, ChevronUp, Loader2, Layers, Info, ExternalLink,
+  Mail, Send, Key, Check
 } from 'lucide-react'
 
 function timeAgo(iso) {
@@ -33,6 +34,12 @@ export default function DriveAccountsPage() {
   const [driveStatus, setDriveStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+
+  // Gmail states
+  const [gmailConfig, setGmailConfig] = useState({ configured: false, adminEmail: '', checking: true })
+  const [gmailModal, setGmailModal] = useState({ isOpen: false, appPassword: '', saving: false, error: '', successMsg: '' })
+  const [resendingAll, setResendingAll] = useState(false)
+  const [resendAllResult, setResendAllResult] = useState(null)
 
   // Filter & search states
   const [searchQuery, setSearchQuery] = useState('')
@@ -68,9 +75,10 @@ export default function DriveAccountsPage() {
     else setLoading(true)
 
     try {
-      const [accRes, driveRes] = await Promise.allSettled([
+      const [accRes, driveRes, gmailRes] = await Promise.allSettled([
         fetch('/api/accounts').then((r) => r.json()),
         fetch('/api/drive/status?t=' + Date.now()).then((r) => r.json()),
+        fetch('/api/accounts/gmail').then((r) => r.json()),
       ])
 
       if (accRes.status === 'fulfilled' && accRes.value?.accounts) {
@@ -79,6 +87,14 @@ export default function DriveAccountsPage() {
 
       if (driveRes.status === 'fulfilled' && driveRes.value) {
         setDriveStatus(driveRes.value)
+      }
+
+      if (gmailRes.status === 'fulfilled' && gmailRes.value) {
+        setGmailConfig({
+          configured: Boolean(gmailRes.value.configured),
+          adminEmail: gmailRes.value.adminEmail || '',
+          checking: false
+        })
       }
     } catch (err) {
       console.error('Error fetching drive & accounts data:', err)
@@ -330,6 +346,55 @@ export default function DriveAccountsPage() {
     }
   }
 
+  const handleSaveGmailPassword = async () => {
+    if (!gmailModal.appPassword.trim()) {
+      toast('Sandi aplikasi tidak boleh kosong', 'warning')
+      return
+    }
+    setGmailModal((prev) => ({ ...prev, saving: true, error: '', successMsg: '' }))
+    try {
+      const res = await fetch('/api/accounts/gmail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appPassword: gmailModal.appPassword })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast('Koneksi Gmail berhasil diverifikasi!', 'success')
+        setGmailConfig((prev) => ({ ...prev, configured: true }))
+        setGmailModal((prev) => ({ ...prev, saving: false, successMsg: data.message, appPassword: '' }))
+      } else {
+        setGmailModal((prev) => ({ ...prev, saving: false, error: data.error || 'Gagal memverifikasi' }))
+      }
+    } catch (err) {
+      setGmailModal((prev) => ({ ...prev, saving: false, error: err.message || 'Koneksi error' }))
+    }
+  }
+
+  const handleResendAllToday = async () => {
+    setResendingAll(true)
+    setResendAllResult(null)
+    try {
+      const res = await fetch('/api/send/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resendAllRecent: true })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast(`Sukses: ${data.message}`, 'success')
+        setResendAllResult({ success: true, message: data.message, count: data.successCount })
+      } else {
+        toast(data.error || 'Gagal mengirim ulang', 'error')
+        setResendAllResult({ success: false, message: data.error || 'Gagal' })
+      }
+    } catch (err) {
+      toast(err.message || 'Koneksi error', 'error')
+    } finally {
+      setResendingAll(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <TopBar title="Drive & Workspace" backHref="/" />
@@ -346,6 +411,20 @@ export default function DriveAccountsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Tombol Status / Setting Gmail Admin */}
+          <button
+            onClick={() => setGmailModal((prev) => ({ ...prev, isOpen: true, error: '', successMsg: '' }))}
+            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all ${
+              gmailConfig.configured
+                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                : 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 animate-pulse'
+            }`}
+            title="Kelola Kredensial Pengiriman Email Gmail Admin"
+          >
+            <Mail size={14} />
+            <span>{gmailConfig.configured ? 'Gmail Aktif' : 'Atur Gmail Admin'}</span>
+          </button>
+
           <button
             onClick={() => loadData(true)}
             disabled={loading || refreshing}
@@ -949,6 +1028,109 @@ export default function DriveAccountsPage() {
               >
                 {isDeleting && <Loader2 size={14} className="animate-spin" />}
                 <span>Ya, Hapus Akun</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📧 Modal Konfigurasi Gmail Admin */}
+      {gmailModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)]/15 text-[var(--primary)]">
+                  <Mail size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-[var(--text)]">Gmail Pengirim Notifikasi</h3>
+                  <p className="text-xs text-[var(--text-3)] font-mono">{gmailConfig.adminEmail || 'mygameonhub@gmail.com'}</p>
+                </div>
+              </div>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                gmailConfig.configured ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/15 text-amber-300 border border-amber-500/20'
+              }`}>
+                {gmailConfig.configured ? <Check size={12} strokeWidth={3} /> : <AlertTriangle size={12} />}
+                <span>{gmailConfig.configured ? 'Aktif Permanen' : 'Perlu Konfigurasi'}</span>
+              </span>
+            </div>
+
+            {/* Panduan Pembuatan Sandi Aplikasi */}
+            <div className="rounded-xl border border-white/5 bg-[var(--elevated)]/60 p-3.5 space-y-2 text-xs text-[var(--text-2)] leading-relaxed">
+              <p className="font-bold text-[var(--text)] flex items-center gap-1.5">
+                <Key size={14} className="text-[var(--primary)]" />
+                Cara Mendapatkan Sandi Aplikasi Google (1 Menit):
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-[11px] text-[var(--text-3)]">
+                <li>Buka <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-[var(--primary)] font-bold hover:underline inline-flex items-center gap-0.5">myaccount.google.com/apppasswords <ExternalLink size={10} /></a> di tab baru.</li>
+                <li>Pastikan login dengan akun <strong className="text-[var(--text)]">{gmailConfig.adminEmail || 'mygameonhub@gmail.com'}</strong>.</li>
+                <li>Beri nama aplikasi: <strong className="text-[var(--text)]">MyGameON Hub</strong> lalu klik <em>Buat</em>.</li>
+                <li>Salin 16 karakter sandi yang muncul (misal: <code>abcd efgh ijkl mnop</code>) dan tempel di bawah.</li>
+              </ol>
+            </div>
+
+            {/* Input Sandi Aplikasi */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-[var(--text-2)]">Sandi Aplikasi Google (16 Karakter):</label>
+              <input
+                type="password"
+                placeholder="abcd efgh ijkl mnop"
+                value={gmailModal.appPassword}
+                onChange={(e) => setGmailModal((prev) => ({ ...prev, appPassword: e.target.value }))}
+                className="w-full rounded-xl border border-[var(--border-soft)] bg-[var(--elevated)] px-3.5 py-2.5 text-xs font-mono text-[var(--text)] placeholder-[var(--text-4)] focus:border-[var(--primary)] focus:outline-none"
+              />
+            </div>
+
+            {/* Pesan Sukses / Error */}
+            {gmailModal.error && (
+              <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">{gmailModal.error}</p>
+            )}
+            {gmailModal.successMsg && (
+              <p className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">{gmailModal.successMsg}</p>
+            )}
+
+            {/* Tombol Resend Batch jika sudah aktif */}
+            {gmailConfig.configured && (
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-[var(--text)]">Kirim Ulang Pesanan Tertunda</p>
+                  <p className="text-[10.5px] text-[var(--text-3)]">Kirim ulang email untuk pesanan 24 jam terakhir.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleResendAllToday}
+                  disabled={resendingAll}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-[var(--primary)] text-black hover:brightness-105 disabled:opacity-50"
+                >
+                  {resendingAll ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>{resendingAll ? 'Mengirim...' : 'Kirim Ulang Semua Hari Ini'}</span>
+                </button>
+              </div>
+            )}
+            {resendAllResult && (
+              <p className={`text-xs p-2 rounded-lg font-medium ${resendAllResult.success ? 'text-emerald-400 bg-emerald-500/10' : 'text-red-400 bg-red-500/10'}`}>
+                {resendAllResult.message}
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setGmailModal((prev) => ({ ...prev, isOpen: false }))}
+                disabled={gmailModal.saving}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-[var(--text-3)] hover:bg-white/5 transition-colors"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveGmailPassword}
+                disabled={gmailModal.saving}
+                className="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2 text-xs font-bold text-[var(--primary-fg)] hover:brightness-110 transition-all disabled:opacity-50"
+              >
+                {gmailModal.saving && <Loader2 size={14} className="animate-spin" />}
+                <span>Verifikasi &amp; Simpan</span>
               </button>
             </div>
           </div>

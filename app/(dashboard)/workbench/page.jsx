@@ -612,7 +612,7 @@ export default function WorkbenchPage() {
 
   return (
     <div className="space-y-5 pb-12">
-      <TopBar title="Meja Kerja Game" />
+      <TopBar title="Workbench" />
 
       {/* 🧭 Header Navigasi & Aksi Global */}
       <WorkbenchHeader

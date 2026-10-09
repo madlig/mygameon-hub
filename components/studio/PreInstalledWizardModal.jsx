@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import {
   Sparkles, CheckCircle2, AlertTriangle, Loader2, Play,
   HardDrive, ShieldCheck, Zap, FolderOpen, Trash2, ArrowRight,
-  X, Check, Disc, RefreshCw, FileCheck, Copy, User, Settings2
+  X, Check, Disc, RefreshCw, FileCheck, Copy, User, Settings2,
+  Clock
 } from 'lucide-react'
 
 export default function PreInstalledWizardModal({
@@ -28,10 +29,11 @@ export default function PreInstalledWizardModal({
   const [mountedDrive, setMountedDrive] = useState(null)
   const [copied, setCopied] = useState(false)
 
-  // Pipeline Otomatis (1-Klik) State
+  // Pipeline Otomatis (Option A: Silent) State
   const [mode, setMode] = useState('auto') // 'auto' | 'manual'
   const [pipelineSession, setPipelineSession] = useState(null)
   const [isPipelineStarting, setIsPipelineStarting] = useState(false)
+  const [isAborting, setIsAborting] = useState(false)
 
   // 1. Fetch info deteksi installer & update
   useEffect(() => {
@@ -52,6 +54,15 @@ export default function PreInstalledWizardModal({
           setSetupInfo(json.data)
           setCustomTitle(json.data.cleanTitle || folderName)
           setTargetPathInput(json.data.suggestedTargetPath || '')
+          if (json.data.activePipeline) {
+            setPipelineSession(json.data.activePipeline)
+            setStatusText(json.data.activePipeline.statusText || 'Pipeline sedang berjalan...')
+            if (json.data.activePipeline.status === 'completed') {
+              setStep('completed')
+            } else if (json.data.activePipeline.status === 'running') {
+              setStep('running')
+            }
+          }
         } else {
           setError(json.error || 'Gagal mendeteksi berkas installer')
         }
@@ -60,7 +71,7 @@ export default function PreInstalledWizardModal({
       .finally(() => setLoading(false))
   }, [isOpen, folderName])
 
-  // Polling cek proses installer jika sedang berjalan
+  // Polling cek proses installer jika sedang berjalan manual
   useEffect(() => {
     if (!activeSession?.sessionId || (step !== 'installing_base' && step !== 'installing_update')) return
 
@@ -89,7 +100,7 @@ export default function PreInstalledWizardModal({
     return () => clearInterval(interval)
   }, [activeSession, step])
 
-  // Polling cek pipeline otomatis jika sedang berjalan
+  // Polling cek pipeline otomatis real-time jika sedang berjalan (1 detik untuk metrik live halus)
   useEffect(() => {
     if (!pipelineSession?.pipelineId || pipelineSession.status !== 'running') return
 
@@ -113,10 +124,35 @@ export default function PreInstalledWizardModal({
           }
         }
       } catch (_) {}
-    }, 2000)
+    }, 1000)
 
     return () => clearInterval(interval)
   }, [pipelineSession?.pipelineId, pipelineSession?.status])
+
+  // Handler: Batalkan Pipeline Otomatis
+  async function handleAbortPipeline() {
+    if (!pipelineSession?.pipelineId) return
+    if (!confirm('Apakah Anda yakin ingin membatalkan instalasi game yang sedang berjalan?')) return
+
+    setIsAborting(true)
+    try {
+      const res = await fetch('/api/installer/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'abort_pipeline', pipelineId: pipelineSession.pipelineId })
+      })
+      const json = await res.json()
+      if (json.success) {
+        setPipelineSession(null)
+        setStep('ready')
+        setStatusText('Instalasi dibatalkan.')
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setIsAborting(false)
+    }
+  }
 
   if (!isOpen) return null
 
@@ -535,62 +571,206 @@ export default function PreInstalledWizardModal({
                     </div>
                   </div>
                 ) : pipelineSession?.status === 'running' ? (
-                  <div className="rounded-2xl border border-amber-500/30 bg-black/40 p-4 space-y-4 shadow-lg">
+                  <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-b from-amber-500/5 via-black/50 to-black/70 p-5 space-y-4 shadow-xl">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Loader2 size={16} className="animate-spin text-amber-400" />
-                        <span className="text-xs font-bold text-white">Pipeline Otomatis Sedang Berjalan...</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                        </span>
+                        <div>
+                          <span className="text-xs font-black text-white uppercase tracking-wider block">
+                            Instalasi Silent Sedang Berjalan (Opsi A)
+                          </span>
+                          <span className="text-[10px] text-[var(--text-3)] font-mono">
+                            Langkah {pipelineSession.stepIndex} dari {pipelineSession.totalSteps} • Background Process
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
-                        Langkah {pipelineSession.stepIndex} dari {pipelineSession.totalSteps}
+                      <span className="text-[11px] font-mono font-black text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30 shadow-inner">
+                        {pipelineSession.progress?.percent || 0}%
                       </span>
                     </div>
 
+                    {/* 🚀 Hero Live Progress Bar */}
+                    <div className="space-y-1.5 bg-black/60 p-3 rounded-xl border border-white/5">
+                      <div className="flex items-center justify-between text-xs font-mono">
+                        <span className="text-amber-300 font-bold flex items-center gap-1.5">
+                          <Zap size={13} className="text-amber-400 animate-pulse" />
+                          <span>Ekstraksi Data ISO ke Folder Tujuan</span>
+                        </span>
+                        <span className="text-white font-black text-sm">
+                          {pipelineSession.progress?.percent || 0}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-3.5 overflow-hidden p-0.5 border border-white/10 shadow-inner">
+                        <div
+                          className="bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-400 h-full rounded-full transition-all duration-500 ease-out shadow-lg"
+                          style={{ width: `${Math.max(2, pipelineSession.progress?.percent || 0)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-[var(--text-4)] pt-0.5">
+                        <span>{pipelineSession.progress?.formattedCurrent || '0 B'} terekstrak</span>
+                        <span>Target: {pipelineSession.progress?.formattedTotal || setupInfo?.isoSizeFormatted || '...'}</span>
+                      </div>
+                    </div>
+
+                    {/* 📊 4-Metric Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 space-y-0.5">
+                        <span className="text-[9px] uppercase text-[var(--text-4)] font-bold block flex items-center gap-1">
+                          <HardDrive size={11} className="text-amber-400" />
+                          <span>Terekstrak</span>
+                        </span>
+                        <span className="font-bold text-white text-[11px] block truncate">
+                          {pipelineSession.progress?.formattedCurrent || '0 B'}
+                        </span>
+                        <span className="text-[9px] text-[var(--text-4)] block truncate">
+                          dari {pipelineSession.progress?.formattedTotal || setupInfo?.isoSizeFormatted || '...'}
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 space-y-0.5">
+                        <span className="text-[9px] uppercase text-[var(--text-4)] font-bold block flex items-center gap-1">
+                          <Zap size={11} className="text-amber-400" />
+                          <span>Kecepatan</span>
+                        </span>
+                        <span className="font-bold text-emerald-300 text-[11px] block truncate">
+                          {pipelineSession.progress?.formattedSpeed || 'Menghitung...'}
+                        </span>
+                        <span className="text-[9px] text-[var(--text-4)] block">
+                          Disk I/O Write
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 space-y-0.5">
+                        <span className="text-[9px] uppercase text-[var(--text-4)] font-bold block flex items-center gap-1">
+                          <Clock size={11} className="text-blue-400" />
+                          <span>Estimasi Sisa</span>
+                        </span>
+                        <span className="font-bold text-blue-300 text-[11px] block truncate">
+                          {pipelineSession.progress?.formattedEta || 'Menghitung...'}
+                        </span>
+                        <span className="text-[9px] text-[var(--text-4)] block">
+                          ETA Waktu Selesai
+                        </span>
+                      </div>
+
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 space-y-0.5">
+                        <span className="text-[9px] uppercase text-[var(--text-4)] font-bold block flex items-center gap-1">
+                          <FileCheck size={11} className="text-purple-400" />
+                          <span>Berkas Game</span>
+                        </span>
+                        <span className="font-bold text-purple-300 text-[11px] block truncate">
+                          {pipelineSession.progress?.filesCount ? pipelineSession.progress.filesCount.toLocaleString() : '...'} file
+                        </span>
+                        <span className="text-[9px] text-[var(--text-4)] block">
+                          File terekstrak
+                        </span>
+                      </div>
+                    </div>
+
                     {/* Step checklist */}
-                    <div className="space-y-2.5 text-xs">
+                    <div className="space-y-2 text-xs bg-black/40 p-3 rounded-xl border border-white/5">
                       <div className={`flex items-center gap-2.5 ${pipelineSession.stepIndex > 1 ? 'text-emerald-400 font-medium' : pipelineSession.stepIndex === 1 ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
-                        {pipelineSession.stepIndex > 1 ? <CheckCircle2 size={16} /> : pipelineSession.stepIndex === 1 ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">1</span>}
+                        {pipelineSession.stepIndex > 1 ? <CheckCircle2 size={15} /> : pipelineSession.stepIndex === 1 ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">1</span>}
                         <span>1. Mount berkas ISO ke Virtual Drive</span>
                       </div>
 
                       <div className={`flex items-center gap-2.5 ${pipelineSession.stepIndex > (setupInfo.hasIso ? 2 : 1) ? 'text-emerald-400 font-medium' : pipelineSession.step === 'installing_base' ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
-                        {pipelineSession.stepIndex > (setupInfo.hasIso ? 2 : 1) ? <CheckCircle2 size={16} /> : pipelineSession.step === 'installing_base' ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">2</span>}
-                        <span>2. Instalasi Game Utama (Inno Setup Semi-Silent)</span>
+                        {pipelineSession.stepIndex > (setupInfo.hasIso ? 2 : 1) ? <CheckCircle2 size={15} /> : pipelineSession.step === 'installing_base' ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">2</span>}
+                        <span>2. Ekstraksi Game Utama (Silent Background Decompress)</span>
                       </div>
 
                       {setupInfo.hasUpdate && (
                         <div className={`flex items-center gap-2.5 ${pipelineSession.stepIndex > 3 ? 'text-emerald-400 font-medium' : pipelineSession.step === 'installing_update' ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
-                          {pipelineSession.stepIndex > 3 ? <CheckCircle2 size={16} /> : pipelineSession.step === 'installing_update' ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">3</span>}
-                          <span>3. Instalasi Patch Update (Inno Setup Semi-Silent)</span>
+                          {pipelineSession.stepIndex > 3 ? <CheckCircle2 size={15} /> : pipelineSession.step === 'installing_update' ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">3</span>}
+                          <span>3. Instalasi Patch Update (Silent)</span>
                         </div>
                       )}
 
                       <div className={`flex items-center gap-2.5 ${pipelineSession.status === 'completed' ? 'text-emerald-400 font-medium' : pipelineSession.step === 'finalizing' ? 'text-amber-300 font-bold' : 'text-[var(--text-4)]'}`}>
-                        {pipelineSession.status === 'completed' ? <CheckCircle2 size={16} /> : pipelineSession.step === 'finalizing' ? <Loader2 size={16} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">{setupInfo.hasUpdate ? '4' : '3'}</span>}
+                        {pipelineSession.status === 'completed' ? <CheckCircle2 size={15} /> : pipelineSession.step === 'finalizing' ? <Loader2 size={15} className="animate-spin text-amber-400" /> : <span className="h-4 w-4 rounded-full border border-current flex items-center justify-center text-[10px]">{setupInfo.hasUpdate ? '4' : '3'}</span>}
                         <span>{setupInfo.hasUpdate ? '4' : '3'}. Dismount Virtual ISO &amp; Injeksi Dokumen Branding</span>
                       </div>
                     </div>
 
                     {/* Status live bar */}
-                    <div className="rounded-xl bg-black/60 border border-white/5 p-3 text-[11px] font-mono text-amber-200 flex items-center gap-2 shadow-inner">
-                      <Sparkles size={14} className="text-amber-400 shrink-0" />
-                      <span className="truncate">{pipelineSession.statusText}</span>
+                    <div className="rounded-xl bg-black/60 border border-white/5 p-3 text-[11px] font-mono text-amber-200 flex items-center justify-between shadow-inner">
+                      <div className="flex items-center gap-2 truncate">
+                        <Sparkles size={14} className="text-amber-400 shrink-0" />
+                        <span className="truncate">{pipelineSession.statusText}</span>
+                      </div>
+                    </div>
+
+                    {/* Running Action buttons */}
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-xs text-[var(--text-3)] hover:text-white px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                        title="Tutup dialog ini. Proses instalasi tetap berjalan di latar belakang dan dapat dipantau dari Download Hub"
+                      >
+                        Minimize ke Download Hub
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAbortPipeline}
+                        disabled={isAborting}
+                        className="text-xs text-rose-300 hover:text-white px-3 py-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isAborting ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                        <span>Batalkan Instalasi</span>
+                      </button>
                     </div>
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-black/40 to-black/60 p-4 space-y-3 shadow-md">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                        <Zap size={14} />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <Zap size={14} />
+                        </span>
+                        <div>
+                          <span className="font-bold text-xs text-white block">Instalasi Otomatis Silent (Opsi A)</span>
+                          <span className="text-[10px] text-[var(--text-4)]">Hands-Free • Jendela Installer Disembunyikan</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                        100% di Dalam App
                       </span>
-                      <span className="font-bold text-xs text-white">Full-Automated (Unattended) Pipeline</span>
                     </div>
+
                     <p className="text-[11px] text-[var(--text-3)] leading-relaxed">
-                      Sistem akan me-mount ISO, menginstal game utama + update secara semi-silent (progress bar ekstraksi tampak di layar PC), menyuntikkan dokumen branding resmi MyGameON, dan menyiapkan game matang di Upload Studio. File ISO mentah tetap aman di folder Download.
+                      Sistem akan me-mount file ISO virtual, mengekstrak data game langsung ke folder <span className="text-white font-mono">{targetPathInput ? targetPathInput.split(/[\\/]/).pop() : setupInfo.cleanTitle}</span> secara silent (tanpa membuka jendela setup Windows di layar desktop), menyuntikkan profil pemain, dan menyematkan dokumen panduan resmi MyGameON.
                     </p>
-                    <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 text-[10px] text-amber-200 font-mono flex items-center gap-2">
-                      <ShieldCheck size={14} className="text-amber-400 shrink-0" />
-                      <span>Catatan: Jika jendela konfirmasi Administrator (UAC) Windows muncul di layar, klik &quot;Yes&quot; agar installer dapat mengekstrak berkas.</span>
+
+                    {/* Pre-flight Disk Check Banner */}
+                    <div className={`rounded-xl p-3 border text-xs flex items-start gap-2.5 ${
+                      setupInfo.hasEnoughDiskSpace
+                        ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300'
+                        : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                    }`}>
+                      {setupInfo.hasEnoughDiskSpace ? (
+                        <CheckCircle2 size={16} className="text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between font-mono">
+                          <span className="font-bold">
+                            {setupInfo.hasEnoughDiskSpace ? 'Ruang Penyimpanan Mencukupi' : 'Perhatian: Ruang Disk D: Menipis'}
+                          </span>
+                          <span className="text-[11px]">
+                            Bebas: {setupInfo.targetDriveFreeFormatted || '...'} / Butuh: ~{setupInfo.isoSizeFormatted || '...'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] opacity-90 leading-relaxed">
+                          {setupInfo.hasEnoughDiskSpace
+                            ? 'Ruang disk D: aman untuk menampung game matang hasil instalasi.'
+                            : 'Ruang disk D: saat ini lebih kecil atau pas-pasan dibanding ukuran game. Pastikan file arsip RAR yang sudah tidak terpakai sudah dihapus untuk menghindari kegagalan ekstraksi (disk full).'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -692,51 +872,51 @@ export default function PreInstalledWizardModal({
             )}
 
             {/* 🎯 Action Buttons Berdasarkan Mode */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+            <div className="flex items-center justify-between pt-3 border-t border-white/10">
               <button
                 type="button"
                 onClick={onClose}
-                disabled={pipelineSession?.status === 'running'}
-                className="rounded-xl px-4 py-2 text-xs font-bold text-[var(--text-3)] hover:text-white transition-all cursor-pointer disabled:opacity-40"
+                className="rounded-xl px-4 py-2 text-xs font-bold text-[var(--text-3)] hover:text-white transition-all cursor-pointer"
               >
-                {step === 'completed' || pipelineSession?.status === 'completed' ? 'Tutup' : 'Batal'}
+                {step === 'completed' || pipelineSession?.status === 'completed' ? 'Tutup' : pipelineSession?.status === 'running' ? 'Minimize' : 'Batal'}
               </button>
 
-              {/* ACTION BUTTONS: MODE OTOMATIS */}
-              {mode === 'auto' && (
-                step === 'completed' || pipelineSession?.status === 'completed' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose()
-                      if (onSuccess) onSuccess()
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-black text-black hover:bg-emerald-400 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
-                  >
-                    <CheckCircle2 size={14} />
-                    <span>🚀 Selesai (Lanjut ke Meja Kerja Studio)</span>
-                  </button>
-                ) : pipelineSession?.status === 'running' ? (
-                  <button
-                    type="button"
-                    disabled
-                    className="inline-flex items-center gap-2 rounded-xl bg-amber-500/50 px-5 py-2.5 text-xs font-black text-black cursor-not-allowed opacity-80"
-                  >
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Sedang Menginstal Otomatis di Latar Belakang...</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleStartAutoPipeline}
-                    disabled={isPipelineStarting}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-5 py-2.5 text-xs font-black text-black hover:from-amber-400 hover:to-amber-300 transition-all cursor-pointer shadow-lg shadow-amber-500/25 disabled:opacity-50"
-                  >
-                    {isPipelineStarting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                    <span>⚡ Mulai Instalasi Otomatis (1-Klik)</span>
-                  </button>
-                )
-              )}
+              <div className="flex items-center gap-2.5">
+                {/* ACTION BUTTONS: MODE OTOMATIS (OPTION A) */}
+                {mode === 'auto' && (
+                  step === 'completed' || pipelineSession?.status === 'completed' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose()
+                        if (onSuccess) onSuccess()
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-xs font-black text-black hover:bg-emerald-400 transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>🚀 Selesai (Lanjut ke Meja Kerja Studio)</span>
+                    </button>
+                  ) : pipelineSession?.status === 'running' ? (
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="inline-flex items-center gap-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 px-4 py-2.5 text-xs font-bold hover:bg-amber-500/30 transition-all cursor-pointer"
+                    >
+                      <Loader2 size={14} className="animate-spin text-amber-400" />
+                      <span>Pantau di Download Hub ({pipelineSession.progress?.percent || 0}%)</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleStartAutoPipeline}
+                      disabled={isPipelineStarting}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 px-5 py-2.5 text-xs font-black text-black hover:from-emerald-400 hover:to-teal-300 transition-all cursor-pointer shadow-lg shadow-emerald-500/25 disabled:opacity-50"
+                    >
+                      {isPipelineStarting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+                      <span>⚡ Mulai Instalasi Silent (Hands-Free)</span>
+                    </button>
+                  )
+                )}
 
               {/* ACTION BUTTONS: MODE MANUAL */}
               {mode === 'manual' && (
@@ -823,6 +1003,7 @@ export default function PreInstalledWizardModal({
                   )}
                 </>
               )}
+              </div>
             </div>
 
           </div>

@@ -9,6 +9,7 @@ import Sims4License from '@/models/Sims4License'
 import BonusSchema from '@/models/BonusSchema'
 import { isSims4Game, buildDeliveryChatMessage, SIMS4_EXTRACT_PASSWORD, SIMS4_DOWNLOAD_URL, SIMS4_TUTORIAL_URL } from '@/lib/sims4'
 import { isValidEmail } from '@/lib/validators'
+import { sendDeliveryEmail } from '@/lib/mailer'
 
 export async function POST(request) {
   try {
@@ -75,6 +76,8 @@ export async function POST(request) {
     const successPCGames = []
     const successSims4Items = []
     const allSuccessItems = []
+    let emailSent = false
+    let emailError = null
 
     for (const item of cart) {
       const isSims = item.isSims4 || isSims4Game(item.name)
@@ -412,11 +415,19 @@ export async function POST(request) {
       }
 
       // Kirim Email Konfirmasi Gabungan jika email diisi
-      if (cleanEmail && gmail) {
+      if (cleanEmail) {
         try {
-          await sendCombinedPurchaseEmail(gmail, cleanEmail, cleanInvoice, successPCGames, successSims4Items)
+          await sendDeliveryEmail({
+            toEmail: cleanEmail,
+            invoice: cleanInvoice,
+            pcGames: successPCGames,
+            sims4Items: successSims4Items,
+            gmailClient: gmail
+          })
+          emailSent = true
         } catch (mailErr) {
-          console.error('[send route] Email sending error:', mailErr.message)
+          emailError = mailErr.message || 'Gagal mengirim email konfirmasi'
+          console.error('[send route] Email sending error:', emailError)
         }
       }
     }
@@ -436,7 +447,9 @@ export async function POST(request) {
       email: cleanEmail,
       chatMessage,
       hasSims4: successSims4Items.length > 0,
-      hasPCGames: successPCGames.length > 0
+      hasPCGames: successPCGames.length > 0,
+      emailSent,
+      emailError,
     })
 
   } catch (err) {
@@ -449,7 +462,7 @@ export async function POST(request) {
 }
 
 // ── Helper Email Konfirmasi Pembelian Gabungan ──
-async function sendCombinedPurchaseEmail(gmail, toEmail, invoice, pcGames = [], sims4Items = []) {
+export async function sendCombinedPurchaseEmail(gmail, toEmail, invoice, pcGames = [], sims4Items = []) {
   let pcSectionHtml = ''
   if (pcGames.length > 0) {
     let listHtml = ''

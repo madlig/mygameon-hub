@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     output: "standalone",
+    devIndicators: false,
     serverExternalPackages: ['googleapis', 'mongoose'],
     allowedDevOrigins: [
       '*.trycloudflare.com',

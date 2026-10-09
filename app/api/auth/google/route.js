@@ -5,11 +5,13 @@ import { getSiteUrl } from '@/lib/siteUrl';
 
 export async function GET(req) {
   const session = await auth();
+  const baseUrl = getSiteUrl(req);
+
+  // Jika belum login, arahkan ke login terlebih dahulu
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.redirect(new URL(`/login?callbackUrl=${encodeURIComponent('/api/auth/google')}`, baseUrl));
   }
 
-  const baseUrl = getSiteUrl(req);
   const oauth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,

@@ -7,6 +7,7 @@ import AccessLog from '@/models/AccessLog'
 import Order from '@/models/Order'
 import Sims4License from '@/models/Sims4License'
 import { isValidEmail } from '@/lib/validators'
+import { sendDeliveryEmail } from '@/lib/mailer'
 
 // Validasi otentikasi webhook via API Secret Token
 function verifyWebhookAuth(request) {
@@ -378,114 +379,26 @@ export async function POST(request) {
 
 // Helper: Format & Kirim Email Gabungan (Game PC + The Sims 4)
 async function sendCombinedWebhookEmail(gmail, toEmail, invoice, processedItems, sims4Licenses) {
-  let pcGamesHtml = ''
-  const pcItems = processedItems.filter(p => !p.isSims4)
+  const pcGames = (processedItems || [])
+    .filter(p => !p.isSims4)
+    .map(p => ({
+      name: p.name,
+      realId: p.folderId || p.realId,
+      expirationTime: p.expirationTime || null
+    }))
 
-  if (pcItems.length > 0) {
-    pcGamesHtml = `
-      <div style="margin-top:20px;margin-bottom:20px;">
-        <h3 style="color:#111;margin:0 0 10px 0;font-size:16px;">🎮 Game PC (Akses Google Drive):</h3>
-    `
-    for (const item of pcItems) {
-      const expiryNote = item.expirationTime
-        ? `<p style="margin:4px 0 0;font-size:12px;color:#e67e22;">⏱ Berlaku hingga: ${new Date(item.expirationTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>`
-        : ''
-      pcGamesHtml += `
-        <div style="padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;">
-          <p style="margin:0;font-weight:bold;color:#111;font-size:14px;">${item.name}</p>
-          <p style="margin:6px 0 0;">
-            <a href="https://drive.google.com/open?id=${item.folderId}" style="color:#2563eb;text-decoration:none;font-weight:bold;font-size:13px;">
-              📂 Buka Folder Google Drive &rarr;
-            </a>
-          </p>
-          ${expiryNote}
-        </div>
-      `
-    }
-    pcGamesHtml += `</div>`
-  }
+  const sims4Items = (sims4Licenses || []).map(s => ({
+    name: 'The Sims 4',
+    realId: s.driveLink ? s.driveLink.replace(/.*id=/, '') : '',
+    allowCC: s.allowCC,
+    invoice: s.invoice || invoice
+  }))
 
-  let sims4Html = ''
-  if (sims4Licenses.length > 0) {
-    sims4Html = `
-      <div style="margin-top:20px;margin-bottom:20px;">
-        <h3 style="color:#111;margin:0 0 10px 0;font-size:16px;">💎 The Sims 4 Ultimate Launcher:</h3>
-    `
-    for (const s of sims4Licenses) {
-      sims4Html += `
-        <div style="background:#fffdf0;border:1px solid #fef08a;border-left:4px solid #eab308;padding:14px;border-radius:8px;margin-bottom:8px;">
-          <p style="margin:0 0 6px 0;font-weight:bold;color:#854d0e;font-size:14px;">Paket: ${s.allowCC ? 'PREMIUM (Full Mods/CC)' : 'STANDARD (Game Only)'}</p>
-          <table style="width:100%;font-size:13px;color:#333;">
-            <tr><td style="width:140px;font-weight:600;padding:3px 0;">🔑 License Key:</td><td style="font-family:monospace;font-weight:bold;color:#000;">${s.invoice}</td></tr>
-            <tr><td style="font-weight:600;padding:3px 0;">🔐 Password Extract:</td><td style="font-family:monospace;font-weight:bold;color:#000;">mygameonlauncher</td></tr>
-          </table>
-          ${s.driveLink ? `
-            <div style="margin-top:10px;">
-              <a href="${s.driveLink}" style="display:inline-block;background:#eab308;color:#000;padding:7px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:bold;">
-                📂 Buka Folder The Sims 4
-              </a>
-            </div>
-          ` : ''}
-        </div>
-      `
-    }
-    sims4Html += `</div>`
-  }
-
-  const subject = `MyGameON | Akses Game Digital #${invoice} Sudah Siap!`
-
-  const htmlBody = `
-    <div style="font-family:'Segoe UI',Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#ffffff;">
-      <div style="background:#111827;padding:24px;text-align:center;">
-        <h1 style="color:#facc15;margin:0;font-size:22px;letter-spacing:1.5px;">MYGAMEON STORE</h1>
-        <p style="color:#9ca3af;margin:6px 0 0;font-size:12px;">Pesanan #${invoice}</p>
-      </div>
-      <div style="padding:28px 24px;">
-        <h2 style="color:#111827;margin-top:0;font-size:18px;">Halo, Gamers! 👋</h2>
-        <p style="color:#4b5563;line-height:1.6;margin:0 0 16px 0;">
-          Terima kasih telah berbelanja di <strong>MyGameON</strong>. Pesanan kamu telah kami proses secara otomatis. Akses Google Drive dan lisensi sudah aktif dan siap dinikmati!
-        </p>
-
-        ${pcGamesHtml}
-        ${sims4Html}
-
-        <div style="margin-top:24px;padding:16px;background:#f3f4f6;border-radius:8px;">
-          <h4 style="margin:0 0 8px 0;color:#1f2937;font-size:14px;">📌 Panduan Instalasi & Ekstrak:</h4>
-          <ol style="margin:0;padding-left:20px;color:#4b5563;font-size:13px;line-height:1.7;">
-            <li>Download file part satu per satu menggunakan koneksi stabil.</li>
-            <li>Tambahkan folder game ke <strong>Exclusion Windows Defender</strong> sebelum mengekstrak.</li>
-            <li>Ekstrak hanya file part 1 (part selanjutnya akan otomatis terhubung).</li>
-          </ol>
-          <div style="text-align:center;margin-top:14px;">
-            <a href="https://bit.ly/vidtutorekstrakdownload" style="display:inline-block;background:#1f2937;color:#ffffff;padding:9px 18px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:bold;">
-              🎬 Tonton Video Tutorial Download &amp; Ekstrak
-            </a>
-          </div>
-        </div>
-
-        <p style="font-size:11px;color:#9ca3af;text-align:center;margin-top:24px;margin-bottom:0;">
-          Email ini dibuat dan dikirim secara otomatis oleh MyGameON Studio Hub.
-        </p>
-      </div>
-    </div>
-  `
-
-  const rawMessage = [
-    `To: ${toEmail}`,
-    `Subject: ${subject}`,
-    'Content-Type: text/html; charset=utf-8',
-    '',
-    htmlBody,
-  ].join('\r\n')
-
-  const encodedMessage = Buffer.from(rawMessage)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-
-  await gmail.users.messages.send({
-    userId: 'me',
-    requestBody: { raw: encodedMessage },
+  return sendDeliveryEmail({
+    toEmail,
+    invoice,
+    pcGames,
+    sims4Items,
+    gmailClient: gmail
   })
 }

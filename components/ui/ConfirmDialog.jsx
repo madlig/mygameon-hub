@@ -18,11 +18,14 @@ import { AlertTriangle, X, Loader2 } from 'lucide-react'
  */
 export default function ConfirmDialog({
   open,
+  isOpen, // Fallback alias untuk open
   title = 'Yakin?',
   description,
   message, // Fallback alias untuk description
-  confirmLabel = 'Lanjutkan',
-  cancelLabel = 'Batal',
+  confirmLabel,
+  confirmText, // Fallback alias untuk confirmLabel
+  cancelLabel,
+  cancelText, // Fallback alias untuk cancelLabel
   tone = 'danger', // 'danger' | 'warning' | 'primary'
   variant, // Fallback alias untuk tone
   loading = false,
@@ -34,20 +37,23 @@ export default function ConfirmDialog({
 
   useEffect(() => { setMounted(true) }, [])
 
+  const effectiveOpen = Boolean(open !== undefined ? open : isOpen)
+  const effectiveConfirmLabel = confirmLabel || confirmText || 'Lanjutkan'
+  const effectiveCancelLabel = cancelLabel || cancelText || 'Batal'
   const isLoading = loading || isSubmitting
   const displayDescription = description || message
   const activeTone = tone || variant || 'danger'
 
   useEffect(() => {
-    if (!open) return
+    if (!effectiveOpen) return
     function onKey(e) {
       if (e.key === 'Escape' && !isLoading) onClose?.()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, isLoading, onClose])
+  }, [effectiveOpen, isLoading, onClose])
 
-  if (!open || !mounted) return null
+  if (!effectiveOpen || !mounted) return null
 
   const confirmClasses =
     activeTone === 'danger'
@@ -118,7 +124,7 @@ export default function ConfirmDialog({
             disabled={isLoading}
             className="pressable flex-1 rounded-xl border border-[var(--border-soft)] py-2.5 text-sm font-semibold text-[var(--text-2)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)] disabled:opacity-50 cursor-pointer"
           >
-            {cancelLabel}
+            {effectiveCancelLabel}
           </button>
           <button
             onClick={handleConfirmClick}
@@ -131,7 +137,7 @@ export default function ConfirmDialog({
                 <span>Memproses…</span>
               </span>
             ) : (
-              confirmLabel
+              effectiveConfirmLabel
             )}
           </button>
         </div>

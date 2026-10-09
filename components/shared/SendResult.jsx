@@ -13,12 +13,16 @@ export default function SendResult({
   email = '',
   invoice = '',
   chatMessage = '',
+  emailSent = true,
+  emailError = '',
   onClose,
   onReset,
 }) {
   const [copiedEmail, setCopiedEmail] = useState(false)
   const [copiedInvoice, setCopiedInvoice] = useState(false)
   const [copiedChat, setCopiedChat] = useState(false)
+  const [resendingEmail, setResendingEmail] = useState(false)
+  const [resendStatus, setResendStatus] = useState(null)
 
   const total = report.length
   const success = report.filter(r => r.status === 'success').length
@@ -31,7 +35,11 @@ export default function SendResult({
       icon: PartyPopper,
       ring: '#22c55e',
       title: 'Pesanan Berhasil Diproses!',
-      subtitle: `${success} game/lisensi telah aktif${email ? ' & email konfirmasi terkirim.' : '.'}`,
+      subtitle: `${success} game/lisensi telah aktif${
+        email
+          ? (emailSent === false ? ' (tetapi email konfirmasi gagal terkirim)' : ' & email konfirmasi terkirim.')
+          : '.'
+      }`,
     },
     partial: {
       icon: AlertTriangle,
@@ -48,6 +56,29 @@ export default function SendResult({
   }[variant]
 
   const HeroIcon = hero.icon
+
+  async function handleResendEmail() {
+    if (!email && !invoice) return
+    setResendingEmail(true)
+    setResendStatus(null)
+    try {
+      const res = await fetch('/api/send/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, invoice })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setResendStatus({ success: true, message: 'Email konfirmasi berhasil dikirim ke pembeli!' })
+      } else {
+        setResendStatus({ success: false, message: data.error || 'Gagal mengirim ulang email' })
+      }
+    } catch (err) {
+      setResendStatus({ success: false, message: err.message || 'Koneksi error' })
+    } finally {
+      setResendingEmail(false)
+    }
+  }
 
   function copyText(text, setter) {
     if (!text) return
@@ -112,6 +143,42 @@ export default function SendResult({
             </button>
           )}
         </div>
+
+        {/* Warning Banner: Email Delivery Failed */}
+        {email && emailSent === false && (
+          <div className="w-full mt-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-left">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11.5px] font-bold text-amber-300">Email Konfirmasi Gagal Terkirim ke Pembeli</p>
+                <p className="text-[11px] text-[var(--text-2)] mt-0.5 leading-relaxed">
+                  File Google Drive telah dibagikan, namun email ke <span className="font-mono text-white">{email}</span> tidak terkirim: {emailError || 'Token otentikasi Gmail Admin kadaluarsa'}.
+                </p>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <a
+                    href="/accounts"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--primary)] hover:underline"
+                  >
+                    Atur Sandi Aplikasi Gmail →
+                  </a>
+                  <button
+                    type="button"
+                    disabled={resendingEmail}
+                    onClick={handleResendEmail}
+                    className="px-2.5 py-1 text-[10.5px] font-bold rounded-lg bg-[var(--primary)] text-black hover:brightness-105 disabled:opacity-50"
+                  >
+                    {resendingEmail ? 'Mengirim...' : 'Kirim Ulang Email'}
+                  </button>
+                </div>
+                {resendStatus && (
+                  <p className={`text-[11px] mt-1.5 font-medium ${resendStatus.success ? 'text-green-400' : 'text-red-400'}`}>
+                    {resendStatus.message}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 2. Count Strip ── */}

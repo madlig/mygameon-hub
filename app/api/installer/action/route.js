@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { execSync } from 'child_process'
 import { NextResponse } from 'next/server'
 import { auth } from '@/app/api/auth/[...nextauth]/route'
 import {
@@ -9,7 +10,8 @@ import {
   getInstallerSession,
   finalizePreInstalledGame,
   runAutoInstallPipeline,
-  getPipelineSession
+  getPipelineSession,
+  abortAutoInstallPipeline
 } from '@/lib/gameInstaller'
 import { getDownloadConfig } from '@/lib/downloadWatcher'
 
@@ -75,7 +77,7 @@ export async function POST(request) {
       }
 
       case 'auto_pipeline': {
-        const { folderName, targetDir, userName } = body
+        const { folderName, targetDir, userName, silentMode } = body
         if (!folderName) return NextResponse.json({ error: 'folderName diperlukan' }, { status: 400 })
         const config = getDownloadConfig()
         const downloadDir = config.downloadDir || 'D:\\Game\\Shopee\\GameDownload'
@@ -85,7 +87,8 @@ export async function POST(request) {
           uploadDir,
           folderName,
           customTargetDir: targetDir,
-          userName: userName || 'mygameon'
+          userName: userName || 'mygameon',
+          silentMode: silentMode || 'headless'
         })
         return NextResponse.json({ success: true, pipeline })
       }
@@ -96,6 +99,13 @@ export async function POST(request) {
         const pipeline = getPipelineSession(pipelineId)
         if (!pipeline) return NextResponse.json({ error: 'Pipeline tidak ditemukan' }, { status: 404 })
         return NextResponse.json({ success: true, pipeline })
+      }
+
+      case 'abort_pipeline': {
+        const { pipelineId } = body
+        if (!pipelineId) return NextResponse.json({ error: 'pipelineId diperlukan' }, { status: 400 })
+        const aborted = abortAutoInstallPipeline(pipelineId)
+        return NextResponse.json({ success: true, aborted })
       }
 
       case 'delete_raw_folder': {
@@ -117,10 +127,20 @@ export async function POST(request) {
         }
 
         try {
-          fs.rmSync(targetPath, { recursive: true, force: true })
+          fs.rmSync(targetPath, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
           return NextResponse.json({ success: true, message: `Folder mentahan ${folderName} berhasil dihapus.` })
-        } catch (err) {
-          return NextResponse.json({ error: `Gagal menghapus folder: ${err.message}` }, { status: 500 })
+        } catch (rmErr) {
+          console.warn('[delete_raw_folder] fs.rmSync gagal, mencoba fallback OS:', rmErr.message)
+          try {
+            if (process.platform === 'win32') {
+              execSync(`powershell -NoProfile -Command "Remove-Item -LiteralPath '${targetPath.replace(/'/g, "''")}' -Recurse -Force"`, { timeout: 60000 })
+            } else {
+              execSync(`rm -rf "${targetPath}"`, { timeout: 60000 })
+            }
+            return NextResponse.json({ success: true, message: `Folder mentahan ${folderName} berhasil dihapus.` })
+          } catch (osErr) {
+            return NextResponse.json({ error: `Gagal menghapus folder: ${rmErr.message}` }, { status: 500 })
+          }
         }
       }
 

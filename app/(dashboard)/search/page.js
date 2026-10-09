@@ -621,7 +621,9 @@ export default function SearchPage() {
         report,
         chatMessage: data.chatMessage || '',
         invoice: data.invoice || currentInvoice,
-        email: data.email || currentEmail
+        email: data.email || currentEmail,
+        emailSent: data.emailSent,
+        emailError: data.emailError,
       })
       if (currentEmail) rememberEmail(currentEmail)
       setIsBonus(false)
@@ -834,6 +836,8 @@ export default function SearchPage() {
                 email={sendReport.email}
                 invoice={sendReport.invoice}
                 chatMessage={sendReport.chatMessage}
+                emailSent={sendReport.emailSent}
+                emailError={sendReport.emailError}
                 onClose={() => setSendReport(null)}
                 onReset={() => { setSendReport(null); setKeyword(''); setInvoice(''); }}
               />
@@ -1021,6 +1025,8 @@ export default function SearchPage() {
                   email={sendReport.email}
                   invoice={sendReport.invoice}
                   chatMessage={sendReport.chatMessage}
+                  emailSent={sendReport.emailSent}
+                  emailError={sendReport.emailError}
                   onClose={() => { setSendReport(null); setManualCashierOpen(false); }}
                   onReset={() => { setSendReport(null); setKeyword(''); setInvoice(''); setCart([]); setManualCashierOpen(false); }}
                 />

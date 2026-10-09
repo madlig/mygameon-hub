@@ -14,8 +14,20 @@ export async function GET(req) {
 
     await connectToDatabase();
     const accounts = await WorkspaceAccount.find().select('-refreshToken');
-    
-    return NextResponse.json({ accounts });
+
+    const adminEmail = (process.env.ADMIN_EMAIL || 'mygameonhub@gmail.com').trim().toLowerCase();
+    const adminAcc = await WorkspaceAccount.findOne({
+      email: { $regex: new RegExp('^' + adminEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }
+    });
+
+    return NextResponse.json({
+      accounts,
+      admin: {
+        email: process.env.ADMIN_EMAIL || 'mygameonhub@gmail.com',
+        isConnected: Boolean(adminAcc?.refreshToken),
+        hasEnvToken: Boolean(process.env.GOOGLE_REFRESH_TOKEN),
+      }
+    });
   } catch (error) {
     console.error('Error fetching accounts:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
