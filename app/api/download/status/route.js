@@ -276,7 +276,13 @@ export async function GET() {
         downloadSpeed,
         downloadSpeedFormatted: downloadSpeed > 0 ? `${formatBytes(downloadSpeed)}/s` : null,
         etaSeconds,
-        etaFormatted: isDownloading ? etaFormatted : (isPaused ? '[Dijeda]' : 'Menunggu antrean...'),
+        etaFormatted: isDownloading
+          ? etaFormatted
+          : isPaused
+          ? '[Dijeda]'
+          : isError
+          ? 'Gagal mengunduh'
+          : 'Menunggu antrean...',
         status,
         statusText,
         activePartName,

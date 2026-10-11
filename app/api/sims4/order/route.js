@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
-import { getGoogleClients } from '@/lib/googleClient'
+import { getGoogleClients, getClientForEmail } from '@/lib/googleClient'
 import connectToDatabase from '@/lib/db'
 import Sims4License from '@/models/Sims4License'
+import GameCatalog from '@/models/GameCatalog'
 import Order from '@/models/Order'
 import Customer from '@/models/Customer'
 import AccessLog from '@/models/AccessLog'
+import { sendHtmlEmail } from '@/lib/mailer'
 
 export async function POST(request) {
   try {
@@ -96,30 +98,64 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Email pembeli wajib diisi untuk mode kirim via email' }, { status: 400 })
     }
 
-    // Resolve shortcut jika folderId berupa Google Apps Shortcut
+    // Share akses folder Sims 4 di Google Drive (Prioritaskan WorkspaceAccount pemilik folder di GameCatalog)
     let realFolderId = folderId
+    let simsOwnerEmail = process.env.ADMIN_EMAIL || 'mygameon'
+    let sharedViaWorkspace = false
+
     try {
-      const f = await drive.files.get({
-        fileId: folderId,
-        fields: 'mimeType, shortcutDetails',
-        supportsAllDrives: true,
-      })
-      if (f.data.mimeType === 'application/vnd.google-apps.shortcut') {
-        realFolderId = f.data.shortcutDetails.targetId
+      const simsCatalogEntries = await GameCatalog.find({
+        $or: [
+          { folderId },
+          { name: { $regex: 'sims 4', $options: 'i' } }
+        ]
+      }).sort({ sendCount: 1 }).lean()
+
+      for (const entry of simsCatalogEntries) {
+        if (!entry.ownerEmail || !entry.folderId) continue
+        try {
+          const wsDrive = await getClientForEmail(entry.ownerEmail)
+          await wsDrive.permissions.create({
+            fileId: entry.folderId,
+            supportsAllDrives: true,
+            sendNotificationEmail: false,
+            requestBody: { role: 'reader', type: 'user', emailAddress: cleanEmail },
+          })
+          realFolderId = entry.folderId
+          simsOwnerEmail = entry.ownerEmail
+          sharedViaWorkspace = true
+          break
+        } catch (_) {}
       }
     } catch (_) {}
 
-    // Share akses folder Sims 4 di Google Drive
-    await drive.permissions.create({
-      fileId: realFolderId,
-      supportsAllDrives: true,
-      sendNotificationEmail: false,
-      requestBody: {
-        role: 'reader',
-        type: 'user',
-        emailAddress: cleanEmail,
-      },
-    })
+    if (!sharedViaWorkspace) {
+      try {
+        const f = await drive.files.get({
+          fileId: folderId,
+          fields: 'mimeType, shortcutDetails',
+          supportsAllDrives: true,
+        })
+        if (f.data.mimeType === 'application/vnd.google-apps.shortcut') {
+          realFolderId = f.data.shortcutDetails.targetId
+        }
+      } catch (_) {}
+
+      try {
+        await drive.permissions.create({
+          fileId: realFolderId,
+          supportsAllDrives: true,
+          sendNotificationEmail: false,
+          requestBody: {
+            role: 'reader',
+            type: 'user',
+            emailAddress: cleanEmail,
+          },
+        })
+      } catch (permErr) {
+        console.warn('Sims 4 Drive permission warning:', permErr.message)
+      }
+    }
 
     // Catat ke MongoDB Sims4License (Ground Truth)
     await Sims4License.create({
@@ -232,23 +268,11 @@ export async function POST(request) {
       </div>
     `
 
-    const rawMessage = [
-      `To: ${cleanEmail}`,
-      `Subject: MyGameON | Pengiriman Akses Download The Sims 4`,
-      'Content-Type: text/html; charset=utf-8',
-      '',
+    await sendHtmlEmail({
+      toEmail: cleanEmail,
+      subject: 'MyGameON | Pengiriman Akses Download The Sims 4',
       htmlBody,
-    ].join('\r\n')
-
-    const encodedMessage = Buffer.from(rawMessage)
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '')
-
-    await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: { raw: encodedMessage },
+      gmailClient: gmail,
     })
 
     return NextResponse.json({ success: true })

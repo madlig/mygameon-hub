@@ -4,6 +4,7 @@ import connectToDatabase from '@/lib/db'
 import AccessLog from '@/models/AccessLog'
 import GameCatalog from '@/models/GameCatalog'
 import { getClientForEmail } from '@/lib/googleClient'
+import { sendHtmlEmail } from '@/lib/mailer'
 
 // Vercel Cron memanggil endpoint ini — tidak pakai session user
 async function getAdminClients() {
@@ -171,22 +172,10 @@ async function sendExpiryNotification(gmail, toEmail, gameName, expDate) {
     </div>
   `
 
-  const rawMessage = [
-    `To: ${toEmail}`,
-    'Subject: ⚠️ Akses Game Kamu Akan Berakhir Besok - MyGameON',
-    'Content-Type: text/html; charset=utf-8',
-    '',
+  await sendHtmlEmail({
+    toEmail,
+    subject: '⚠️ Akses Game Kamu Akan Berakhir Besok - MyGameON',
     htmlBody,
-  ].join('\r\n')
-
-  const encodedMessage = Buffer.from(rawMessage)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-
-  await gmail.users.messages.send({
-    userId: 'me',
-    requestBody: { raw: encodedMessage },
+    gmailClient: gmail,
   })
 }

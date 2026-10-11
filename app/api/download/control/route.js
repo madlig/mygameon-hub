@@ -26,43 +26,45 @@ export async function POST(request) {
 
     const body = await request.json()
     const { action, taskId, url, filename, referrer, cookies, targetPath, deleteFile } = body
+    const pkgIdentifier = body.packageName || body.packageKey || taskId
 
-    if (action === 'pause') {
-      if (!taskId) return NextResponse.json({ error: 'Task ID wajib diisi' }, { status: 400 })
-      const ok = invokeStream('pauseDownload', taskId)
+    if (action === 'pause' || action === 'pause_task') {
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Task ID atau Nama Paket wajib diisi' }, { status: 400 })
+      const ok = invokeStream('pauseDownload', pkgIdentifier) || invokeStream('pausePackage', pkgIdentifier)
       return NextResponse.json({ success: ok, message: ok ? 'Unduhan dijeda' : 'Gagal menjeda unduhan' })
     }
 
-    if (action === 'resume') {
-      if (!taskId) return NextResponse.json({ error: 'Task ID wajib diisi' }, { status: 400 })
-      const ok = invokeStream('resumeDownload', taskId)
+    if (action === 'resume' || action === 'resume_task') {
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Task ID atau Nama Paket wajib diisi' }, { status: 400 })
+      const ok = invokeStream('resumeDownload', pkgIdentifier) || invokeStream('resumePackage', pkgIdentifier)
       return NextResponse.json({ success: ok, message: ok ? 'Unduhan dilanjutkan' : 'Gagal melanjutkan unduhan' })
     }
 
-    if (action === 'cancel') {
-      if (!taskId) return NextResponse.json({ error: 'Task ID wajib diisi' }, { status: 400 })
-      const ok = invokeStream('cancelDownload', taskId, deleteFile !== false)
+    if (action === 'cancel' || action === 'cancel_task') {
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Task ID atau Nama Paket wajib diisi' }, { status: 400 })
+      const ok =
+        invokeStream('cancelDownload', pkgIdentifier, deleteFile !== false) ||
+        invokeStream('cancelPackage', pkgIdentifier, deleteFile !== false)
       return NextResponse.json({ success: ok, message: ok ? 'Unduhan dibatalkan' : 'Gagal membatalkan unduhan' })
     }
 
     if (action === 'pause_package') {
-      const packageName = body.packageName
-      if (!packageName) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
-      const ok = invokeStream('pausePackage', packageName)
-      return NextResponse.json({ success: ok, message: ok ? `Paket "${packageName}" dijeda` : 'Gagal menjeda paket' })
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
+      const ok = invokeStream('pausePackage', pkgIdentifier) || invokeStream('pauseDownload', pkgIdentifier)
+      return NextResponse.json({ success: ok, message: ok ? `Paket "${pkgIdentifier}" dijeda` : 'Gagal menjeda paket' })
     }
 
     if (action === 'resume_package') {
-      const packageName = body.packageName
-      if (!packageName) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
-      const ok = invokeStream('resumePackage', packageName)
-      return NextResponse.json({ success: ok, message: ok ? `Paket "${packageName}" dilanjutkan` : 'Gagal melanjutkan paket' })
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
+      const ok = invokeStream('resumePackage', pkgIdentifier) || invokeStream('resumeDownload', pkgIdentifier)
+      return NextResponse.json({ success: ok, message: ok ? `Paket "${pkgIdentifier}" dilanjutkan` : 'Gagal melanjutkan paket' })
     }
 
     if (action === 'cancel_package') {
-      const packageName = body.packageName
-      if (!packageName) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
-      let ok = invokeStream('cancelPackage', packageName, deleteFile !== false)
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
+      let ok =
+        invokeStream('cancelPackage', pkgIdentifier, deleteFile !== false) ||
+        invokeStream('cancelDownload', pkgIdentifier, deleteFile !== false)
 
       // Fallback: Jika tidak terdaftar di streamDownloader tasks, periksa folder fisik di downloadDir
       if (!ok) {
@@ -70,7 +72,7 @@ export async function POST(request) {
           const { getDownloadConfig } = await import('@/lib/downloadWatcher')
           const config = getDownloadConfig()
           const downloadDir = config.downloadDir || 'D:\\Game\\Shopee\\GameDownload'
-          const candidateFolder = path.join(downloadDir, packageName)
+          const candidateFolder = path.join(downloadDir, pkgIdentifier)
           if (fs.existsSync(candidateFolder)) {
             if (deleteFile !== false) {
               fs.rmSync(candidateFolder, { recursive: true, force: true })
@@ -80,7 +82,7 @@ export async function POST(request) {
         } catch (_) {}
       }
 
-      return NextResponse.json({ success: ok, message: ok ? `Paket "${packageName}" dibatalkan` : 'Gagal membatalkan paket' })
+      return NextResponse.json({ success: ok, message: ok ? `Paket "${pkgIdentifier}" dibatalkan` : 'Gagal membatalkan paket' })
     }
 
     if (action === 'pause_all') {
@@ -103,18 +105,17 @@ export async function POST(request) {
     }
 
     if (action === 'start_task') {
-      if (!taskId) return NextResponse.json({ error: 'Task ID wajib diisi' }, { status: 400 })
-      const ok = invokeStream('startTask', taskId)
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Task ID wajib diisi' }, { status: 400 })
+      const ok = invokeStream('startTask', pkgIdentifier) || invokeStream('startPackage', pkgIdentifier)
       return NextResponse.json({ success: ok, message: ok ? 'Unduhan dimulai' : 'Gagal memulai unduhan' })
     }
 
-    if (action === 'start_package') {
-      const packageName = body.packageName
-      if (!packageName) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
-      const ok = invokeStream('startPackage', packageName)
+    if (action === 'start_package' || action === 'start_staged') {
+      if (!pkgIdentifier) return NextResponse.json({ error: 'Nama paket wajib diisi' }, { status: 400 })
+      const ok = invokeStream('startPackage', pkgIdentifier) || invokeStream('startTask', pkgIdentifier)
       return NextResponse.json({
         success: ok,
-        message: ok ? `Paket "${packageName}" masuk ke antrean unduh!` : 'Gagal memulai paket unduhan'
+        message: ok ? `Paket "${pkgIdentifier}" masuk ke antrean unduh!` : 'Gagal memulai paket unduhan'
       })
     }
 
@@ -128,17 +129,17 @@ export async function POST(request) {
 
     if (action === 'remove_staged') {
       if (taskId) {
-        const ok = invokeStream('removeStaged', taskId)
-        return NextResponse.json({ success: ok, message: ok ? 'Unduhan dihapus dari penampungan' : 'Gagal menghapus unduhan' })
+        const ok = invokeStream('removeStaged', taskId) || invokeStream('removePackage', taskId)
+        return NextResponse.json({ success: ok, message: ok ? 'Berkas tautan dihapus dari penampungan' : 'Gagal menghapus tautan' })
       }
-      if (body.packageName) {
-        const ok = invokeStream('removePackage', body.packageName)
-        return NextResponse.json({ success: ok, message: ok ? `Paket "${body.packageName}" dihapus dari penampungan` : 'Gagal menghapus paket' })
+      if (pkgIdentifier) {
+        const ok = invokeStream('removePackage', pkgIdentifier) || invokeStream('removeStaged', pkgIdentifier)
+        return NextResponse.json({ success: ok, message: ok ? `Paket "${pkgIdentifier}" dihapus dari penampungan` : 'Gagal menghapus paket' })
       }
       return NextResponse.json({ error: 'Task ID atau Nama Paket wajib diisi' }, { status: 400 })
     }
 
-    if (action === 'add_url') {
+    if (action === 'add_url' || action === 'add_stream_download') {
       if (!url) return NextResponse.json({ error: 'URL unduhan wajib diisi' }, { status: 400 })
       const autoStart = !!body.autoStart
       const startFn = typeof streamDownloader.startDownload === 'function'
@@ -164,7 +165,7 @@ export async function POST(request) {
     }
 
     if (action === 'open_folder') {
-      const p = targetPath || 'D:\\Game\\Shopee\\GameDownload'
+      const p = targetPath || body.folderPath || 'D:\\Game\\Shopee\\GameDownload'
       if (process.platform === 'win32') {
         exec(`explorer.exe "${p}"`)
       }
@@ -253,6 +254,7 @@ export async function POST(request) {
         success: true,
         freedBytes,
         formattedFreed: formatBytes(freedBytes),
+        freedSizeFormatted: formatBytes(freedBytes),
         deletedCount: deletedFiles.length,
         message: deletedFiles.length > 0
           ? `Berhasil membersihkan ${deletedFiles.length} file part arsip (${formatBytes(freedBytes)} ruang disk dibebaskan).`
@@ -260,7 +262,7 @@ export async function POST(request) {
       })
     }
 
-    if (action === 'extract_now') {
+    if (action === 'extract_now' || action === 'extract_archive') {
       let p = targetPath || body.folderPath
       if (!p && body.folderName) {
         const { getDownloadConfig } = await import('@/lib/downloadWatcher')
@@ -294,7 +296,7 @@ export async function POST(request) {
       return NextResponse.json({ success: true, message: 'Notifikasi ekstraksi ditutup' })
     }
 
-    if (action === 'stop_jd') {
+    if (action === 'stop_jd' || action === 'takeover_cnl_port') {
       const { killJDownloaderProcess, startCNLServer } = await import('@/lib/cnlServer')
       await killJDownloaderProcess()
       const cnlState = startCNLServer()

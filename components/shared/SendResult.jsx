@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, X, AlertTriangle, PartyPopper, Copy, CheckCheck, MessageSquare, Tag } from 'lucide-react'
+import { Check, X, AlertTriangle, PartyPopper, Copy, CheckCheck, MessageSquare, Tag, Send, Loader2 } from 'lucide-react'
 
 /**
  * Panel hasil pengiriman game — sukses / sebagian / gagal.
@@ -28,6 +28,7 @@ export default function SendResult({
   const success = report.filter(r => r.status === 'success').length
   const failed = total - success
 
+  const isEmailDelivered = emailSent !== false || resendStatus?.success === true
   const variant = success === total ? 'success' : success === 0 ? 'error' : 'partial'
 
   const hero = {
@@ -37,7 +38,7 @@ export default function SendResult({
       title: 'Pesanan Berhasil Diproses!',
       subtitle: `${success} game/lisensi telah aktif${
         email
-          ? (emailSent === false ? ' (tetapi email konfirmasi gagal terkirim)' : ' & email konfirmasi terkirim.')
+          ? (!isEmailDelivered ? ' (tetapi email konfirmasi gagal terkirim)' : ' & email konfirmasi terkirim.')
           : '.'
       }`,
     },
@@ -69,7 +70,7 @@ export default function SendResult({
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        setResendStatus({ success: true, message: 'Email konfirmasi berhasil dikirim ke pembeli!' })
+        setResendStatus({ success: true, message: data.message || `Email konfirmasi berhasil dikirim ke ${email}!` })
       } else {
         setResendStatus({ success: false, message: data.error || 'Gagal mengirim ulang email' })
       }
@@ -144,39 +145,62 @@ export default function SendResult({
           )}
         </div>
 
-        {/* Warning Banner: Email Delivery Failed */}
+        {/* Warning Banner: Email Delivery Failed (or Resent Confirmation) */}
         {email && emailSent === false && (
-          <div className="w-full mt-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-left">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[11.5px] font-bold text-amber-300">Email Konfirmasi Gagal Terkirim ke Pembeli</p>
-                <p className="text-[11px] text-[var(--text-2)] mt-0.5 leading-relaxed">
-                  File Google Drive telah dibagikan, namun email ke <span className="font-mono text-white">{email}</span> tidak terkirim: {emailError || 'Token otentikasi Gmail Admin kadaluarsa'}.
+          resendStatus?.success ? (
+            <div className="w-full mt-3 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-left">
+              <div className="flex items-center gap-2">
+                <Check size={15} className="text-emerald-400 shrink-0" />
+                <p className="text-[11.5px] font-bold text-emerald-300">
+                  {resendStatus.message}
                 </p>
-                <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <a
-                    href="/accounts"
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--primary)] hover:underline"
-                  >
-                    Atur Sandi Aplikasi Gmail →
-                  </a>
-                  <button
-                    type="button"
-                    disabled={resendingEmail}
-                    onClick={handleResendEmail}
-                    className="px-2.5 py-1 text-[10.5px] font-bold rounded-lg bg-[var(--primary)] text-black hover:brightness-105 disabled:opacity-50"
-                  >
-                    {resendingEmail ? 'Mengirim...' : 'Kirim Ulang Email'}
-                  </button>
-                </div>
-                {resendStatus && (
-                  <p className={`text-[11px] mt-1.5 font-medium ${resendStatus.success ? 'text-green-400' : 'text-red-400'}`}>
-                    {resendStatus.message}
-                  </p>
-                )}
               </div>
             </div>
+          ) : (
+            <div className="w-full mt-3 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-left">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[12px] font-bold text-amber-300">Email Konfirmasi Gagal Terkirim ke Pembeli</p>
+                  <p className="text-[11px] text-[var(--text-2)] mt-0.5 leading-relaxed">
+                    File Google Drive &amp; lisensi telah aktif, namun email ke <span className="font-mono text-white">{email}</span> gagal terkirim ({emailError || 'Kendala koneksi SMTP'}).
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={resendingEmail}
+                      onClick={handleResendEmail}
+                      className="pressable inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[11px] font-bold rounded-xl bg-[var(--primary)] text-black shadow-sm hover:brightness-105 disabled:opacity-50"
+                    >
+                      {resendingEmail ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                      {resendingEmail ? 'Mengirim Ulang Email...' : 'Kirim Ulang Email Sekarang'}
+                    </button>
+                    <a
+                      href="/accounts"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--primary)] hover:underline"
+                    >
+                      Cek Pengaturan Gmail →
+                    </a>
+                  </div>
+                  {resendStatus && !resendStatus.success && (
+                    <p className="text-[11px] mt-2 font-medium text-red-400">
+                      {resendStatus.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        )}
+
+        {/* Status feedback jika kirim ulang dipicu saat emailSent awalnya true */}
+        {email && emailSent !== false && resendStatus && (
+          <div className={`w-full mt-2 px-3 py-2 rounded-xl border text-left text-[11px] font-semibold ${
+            resendStatus.success
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}>
+            {resendStatus.message}
           </div>
         )}
       </div>
@@ -249,7 +273,19 @@ export default function SendResult({
       </div>
 
       {/* ── 5. Tombol Aksi ── */}
-      <div className="flex gap-2 border-t border-[var(--border-soft)] p-3">
+      <div className="flex flex-wrap gap-2 border-t border-[var(--border-soft)] p-3">
+        {email && success > 0 && (
+          <button
+            type="button"
+            disabled={resendingEmail}
+            onClick={handleResendEmail}
+            className="pressable inline-flex items-center justify-center gap-1.5 rounded-xl border border-[var(--primary)]/40 bg-[var(--primary)]/10 px-3 py-2 text-[11.5px] font-bold text-[var(--primary)] transition-colors hover:bg-[var(--primary)]/20 disabled:opacity-50"
+            title="Kirim ulang email konfirmasi ke pembeli"
+          >
+            {resendingEmail ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+            <span>{resendingEmail ? 'Mengirim...' : 'Kirim Ulang Email'}</span>
+          </button>
+        )}
         {onReset && (
           <button
             onClick={onReset}

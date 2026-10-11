@@ -175,6 +175,31 @@ export default function WorkbenchView({
     })
   }
 
+  // Aksi Melanjutkan Upload yang Terputus / Error
+  const handleResumeUpload = () => {
+    const targetPath =
+      selectedFolder?.path ||
+      processState?.folderPath ||
+      (processState?.gameName ? `D:\\Game\\Shopee\\GameUpload\\${processState.gameName}` : null)
+    const email = targetWorkspace?.email || processState?.targetEmail
+
+    if (startProcessing && targetPath && email) {
+      startProcessing('upload', {
+        folderPath: targetPath,
+        targetEmail: email,
+        targetFolderId: processState?.driveFolderId || driveCheck?.folderId || selectedGame?.folderId || null,
+        resume: true,
+        cleanReplace: false,
+        forceWipeExisting: false,
+        gameName: processState?.gameName || selectedFolder?.name,
+        customTitle: processState?.gameName || selectedFolder?.name,
+        fileVersion: processState?.fileVersion || fileVersion,
+      })
+    } else {
+      handleProcessControl?.('resume')
+    }
+  }
+
   // Aksi Hapus File Tunggal
   const handleDeleteSingleFile = async (file) => {
     if (!file?.fullPath || !selectedFolder) return
@@ -325,6 +350,7 @@ export default function WorkbenchView({
               selectedFolder={selectedFolder}
               targetWorkspace={targetWorkspace}
               onProcessControl={handleProcessControl}
+              onResumeUpload={handleResumeUpload}
               onToggleSecondaryView={() => setShowSecondaryView((prev) => !prev)}
               showSecondaryView={showSecondaryView}
               onResetProcessState={onResetProcessState}

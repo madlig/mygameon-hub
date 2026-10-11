@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import {
   Search, ShieldX, ShieldAlert, Check, X,
   ExternalLink, Clock, User, ShieldCheck, Gamepad2, AlertCircle, Save, DownloadCloud, Loader2, Plus, Trash2, Settings,
-  Copy, CheckCheck, KeyRound, Send, Sparkles, ShoppingBag, ArrowUpDown, Flame, Filter
+  Copy, CheckCheck, KeyRound, Send, Sparkles, ShoppingBag, ArrowUpDown, Flame, Filter, Mail
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -90,6 +90,7 @@ export default function CustomerCRMPage() {
   
   const [showBonusSettings, setShowBonusSettings] = useState(false)
   const [resend, setResend] = useState(null)
+  const [resendingMap, setResendingMap] = useState({})
   const [copiedMsg, setCopiedMsg] = useState(false)
   const [copiedKey, setCopiedKey] = useState(null)
   const [copiedInvoice, setCopiedInvoice] = useState(null)
@@ -227,7 +228,11 @@ export default function CustomerCRMPage() {
 
   function openResend(lic) {
     setCopiedMsg(false)
-    setResend({ invoice: lic.invoice, message: buildSims4DeliveryMessage(lic.invoice, lic.cc === 'Y') })
+    setResend({
+      invoice: lic.invoice,
+      email: lic.email || scannedEmail,
+      message: buildSims4DeliveryMessage(lic.invoice, lic.cc === 'Y')
+    })
   }
 
   function copyResend() {
@@ -237,6 +242,35 @@ export default function CustomerCRMPage() {
       setCopiedMsg(true)
       setTimeout(() => setCopiedMsg(false), 1800)
     } catch (e) {}
+  }
+
+  async function handleResendOrderEmail({ orderId, invoice, targetEmail, key }, e) {
+    if (e) e.stopPropagation()
+    const k = key || orderId || invoice || targetEmail
+    if (!k) return
+    setResendingMap(prev => ({ ...prev, [k]: 'sending' }))
+    setMessage(null)
+    try {
+      const res = await fetch('/api/send/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, invoice, email: targetEmail }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setResendingMap(prev => ({ ...prev, [k]: 'sent' }))
+        setMessage({ type: 'success', text: data.message || `Email konfirmasi berhasil dikirim ulang ke ${targetEmail || scannedEmail}!` })
+        setTimeout(() => {
+          setResendingMap(prev => ({ ...prev, [k]: null }))
+        }, 3500)
+      } else {
+        setResendingMap(prev => ({ ...prev, [k]: 'error' }))
+        setMessage({ type: 'error', text: data.error || 'Gagal mengirim ulang email.' })
+      }
+    } catch (_) {
+      setResendingMap(prev => ({ ...prev, [k]: 'error' }))
+      setMessage({ type: 'error', text: 'Gagal terhubung ke server saat mengirim ulang email.' })
+    }
   }
 
   async function handleDeepScan() {
@@ -428,7 +462,39 @@ export default function CustomerCRMPage() {
                 </div>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {(orderHistory.length > 0 || simsLicenses.length > 0 || activeAccess.length > 0) && (() => {
+                  const hdrKey = `hdr-${scannedEmail}`
+                  const state = resendingMap[hdrKey]
+                  const latestOrd = orderHistory[0]
+                  const latestSims = simsLicenses[0]
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => handleResendOrderEmail({
+                        orderId: latestOrd?._id,
+                        invoice: latestOrd?.invoice || latestSims?.invoice,
+                        targetEmail: scannedEmail,
+                        key: hdrKey,
+                      }, e)}
+                      disabled={state === 'sending'}
+                      className={`pressable flex items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition disabled:opacity-60 ${
+                        state === 'sent'
+                          ? 'border-[var(--success)]/40 bg-[var(--success)]/15 text-[#4ade80]'
+                          : 'border-[var(--primary)]/30 bg-[var(--primary)]/12 text-[var(--primary)] hover:bg-[var(--primary)]/20'
+                      }`}
+                      title="Kirim ulang email konfirmasi pesanan terakhir ke pembeli ini"
+                    >
+                      {state === 'sending' ? (
+                        <><Loader2 size={14} className="animate-spin" /> Mengirim...</>
+                      ) : state === 'sent' ? (
+                        <><Check size={14} /> Email Terkirim!</>
+                      ) : (
+                        <><Mail size={14} /> Kirim Ulang Email</>
+                      )}
+                    </button>
+                  )
+                })()}
                 {customer?.status === 'blacklisted' ? (
                   <button onClick={() => updateCustomerStatus('active')} disabled={isUpdating} className="pressable flex items-center gap-2 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] px-4 py-2 text-sm font-bold text-[var(--text)] transition hover:border-[var(--success)] hover:text-[var(--success)]">
                     <ShieldCheck size={16} /> Pulihkan
@@ -476,6 +542,8 @@ export default function CustomerCRMPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {simsLicenses.map(sims => {
                   const isLocked = !!(sims.hwid || (Array.isArray(sims.hwids) && sims.hwids.length > 0))
+                  const simsMailKey = `sims-${sims.invoice}`
+                  const simsMailState = resendingMap[simsMailKey]
                   return (
                     <div key={sims._id || sims.invoice} className="flex flex-col justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
                       <div>
@@ -553,13 +621,38 @@ export default function CustomerCRMPage() {
                             Unban
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => openResend(sims)}
-                          className="pressable ml-auto flex items-center gap-1 rounded-xl bg-[var(--primary)]/15 px-2.5 py-1 text-[11px] font-bold text-[var(--primary)] transition hover:bg-[var(--primary)]/25"
-                        >
-                          <Send size={11} /> Kirim Ulang
-                        </button>
+                        <div className="ml-auto flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => handleResendOrderEmail({
+                              invoice: sims.invoice,
+                              targetEmail: sims.email || scannedEmail,
+                              key: simsMailKey,
+                            }, e)}
+                            disabled={simsMailState === 'sending'}
+                            className={`pressable flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
+                              simsMailState === 'sent'
+                                ? 'border-[var(--success)]/40 bg-[var(--success)]/15 text-[#4ade80]'
+                                : 'border-[var(--border-soft)] bg-[var(--elevated)] text-[var(--text-2)] hover:border-[var(--primary)] hover:text-[var(--primary)]'
+                            }`}
+                            title="Kirim ulang email konfirmasi ke pembeli"
+                          >
+                            {simsMailState === 'sending' ? (
+                              <><Loader2 size={11} className="animate-spin" /> Mengirim...</>
+                            ) : simsMailState === 'sent' ? (
+                              <><Check size={11} /> Terkirim</>
+                            ) : (
+                              <><Mail size={11} /> Kirim Email</>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openResend(sims)}
+                            className="pressable flex items-center gap-1 rounded-xl bg-[var(--primary)]/15 px-2.5 py-1 text-[11px] font-bold text-[var(--primary)] transition hover:bg-[var(--primary)]/25"
+                          >
+                            <Send size={11} /> Teks Chat
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )
@@ -575,60 +668,92 @@ export default function CustomerCRMPage() {
                 <ShoppingBag size={16} className="text-amber-400" /> Riwayat Pesanan Shopee ({orderHistory.length})
               </h3>
               <div className="grid gap-3 sm:grid-cols-2">
-                {orderHistory.map(ord => (
-                  <div key={ord._id || ord.invoice} className="flex flex-col justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
-                    <div>
-                      <div className="mb-2 flex items-center justify-between">
-                        {ord.invoice ? (
-                          <button
-                            type="button"
-                            onClick={() => copyInvoice(ord.invoice)}
-                            className="group flex items-center gap-1.5 font-mono text-xs font-bold text-[var(--primary)] hover:underline"
-                            title="Salin No. Pesanan Shopee"
-                          >
-                            <span>{ord.invoice}</span>
-                            {copiedInvoice === ord.invoice ? (
-                              <CheckCheck size={13} className="text-[var(--success)]" />
-                            ) : (
-                              <Copy size={13} className="text-[var(--text-3)] group-hover:text-[var(--text)]" />
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-xs font-medium text-[var(--text-3)] italic">Tanpa Invoice</span>
-                        )}
-                        <span className="text-[10px] font-medium text-[var(--text-3)]">
-                          {fmtDate(ord.orderDate)} • {fmtTime(ord.orderDate)}
-                        </span>
+                {orderHistory.map(ord => {
+                  const ordKey = `ord-${ord._id || ord.invoice}`
+                  const ordMailState = resendingMap[ordKey]
+                  return (
+                    <div key={ord._id || ord.invoice} className="flex flex-col justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 shadow-sm">
+                      <div>
+                        <div className="mb-2 flex items-center justify-between">
+                          {ord.invoice ? (
+                            <button
+                              type="button"
+                              onClick={() => copyInvoice(ord.invoice)}
+                              className="group flex items-center gap-1.5 font-mono text-xs font-bold text-[var(--primary)] hover:underline"
+                              title="Salin No. Pesanan Shopee"
+                            >
+                              <span>{ord.invoice}</span>
+                              {copiedInvoice === ord.invoice ? (
+                                <CheckCheck size={13} className="text-[var(--success)]" />
+                              ) : (
+                                <Copy size={13} className="text-[var(--text-3)] group-hover:text-[var(--text)]" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-xs font-medium text-[var(--text-3)] italic">Tanpa Invoice</span>
+                          )}
+                          <span className="text-[10px] font-medium text-[var(--text-3)]">
+                            {fmtDate(ord.orderDate)} • {fmtTime(ord.orderDate)}
+                          </span>
+                        </div>
+
+                        {/* Items */}
+                        <div className="space-y-1.5 mt-2">
+                          {ord.cartItems?.map((it, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-2 text-xs rounded-lg bg-[var(--elevated)]/50 px-2.5 py-1">
+                              <span className="truncate font-semibold text-[var(--text)]">🎮 {it.name}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {it.isBonus && (
+                                  <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">Bonus</span>
+                                )}
+                                {it.isSims4 && (
+                                  <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold text-purple-300">Sims 4</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
 
-                      {/* Items */}
-                      <div className="space-y-1.5 mt-2">
-                        {ord.cartItems?.map((it, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-2 text-xs rounded-lg bg-[var(--elevated)]/50 px-2.5 py-1">
-                            <span className="truncate font-semibold text-[var(--text)]">🎮 {it.name}</span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {it.isBonus && (
-                                <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">Bonus</span>
-                              )}
-                              {it.isSims4 && (
-                                <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold text-purple-300">Sims 4</span>
-                              )}
-                            </div>
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-soft)] pt-2.5">
+                        {ord.bonusEligible > 0 ? (
+                          <div className="flex items-center gap-1.5 text-[10px]">
+                            <span className="text-[var(--text-3)]">Bonus:</span>
+                            <span className="font-bold text-[var(--primary)]">
+                              {ord.bonusClaimed || 0}/{ord.bonusEligible} terpakai
+                            </span>
                           </div>
-                        ))}
+                        ) : (
+                          <span className="text-[10px] text-[var(--text-3)]">Pesanan selesai</span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleResendOrderEmail({
+                            orderId: ord._id,
+                            invoice: ord.invoice,
+                            targetEmail: ord.email || scannedEmail,
+                            key: ordKey,
+                          }, e)}
+                          disabled={ordMailState === 'sending'}
+                          className={`pressable ml-auto flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-bold transition disabled:opacity-50 ${
+                            ordMailState === 'sent'
+                              ? 'bg-[var(--success)]/15 text-[#4ade80] border border-[var(--success)]/30'
+                              : 'bg-[var(--primary)]/15 text-[var(--primary)] hover:bg-[var(--primary)]/25'
+                          }`}
+                        >
+                          {ordMailState === 'sending' ? (
+                            <><Loader2 size={12} className="animate-spin" /> Mengirim...</>
+                          ) : ordMailState === 'sent' ? (
+                            <><Check size={12} /> Email Terkirim!</>
+                          ) : (
+                            <><Mail size={12} /> Kirim Ulang Email</>
+                          )}
+                        </button>
                       </div>
                     </div>
-
-                    {ord.bonusEligible > 0 && (
-                      <div className="mt-3 flex items-center justify-between border-t border-[var(--border-soft)] pt-2 text-[10px]">
-                        <span className="text-[var(--text-3)]">Bonus didapat:</span>
-                        <span className="font-bold text-[var(--primary)]">
-                          {ord.bonusClaimed || 0}/{ord.bonusEligible} terpakai
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -839,51 +964,83 @@ export default function CustomerCRMPage() {
                 ) : (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      {visibleCustomers.map(c => (
-                        <button
-                          key={c.email}
-                          onClick={() => { setEmail(c.email); handleSearch(c.email) }}
-                          className="text-left flex flex-col justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 transition-all hover:border-[var(--primary)] hover:shadow-[0_10px_30px_-15px_rgba(255,209,0,0.2)] group"
-                        >
-                          <div>
-                            <div className="flex items-center gap-3">
-                              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${c.status === 'blacklisted' ? 'bg-red-500/10 text-red-500' : 'bg-[var(--primary)]/10 text-[var(--primary)]'}`}>
-                                <User size={20} />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate font-bold text-[var(--text)] text-sm group-hover:text-[var(--primary)] transition-colors">{c.email}</p>
-                                <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)] font-medium">
-                                  <span>{c.orderCount || 0} Order</span>
-                                  <span>•</span>
-                                  <span className="truncate">{fmtActivity(c.lastOrderDate || c.updatedAt || c.createdAt)}</span>
+                      {visibleCustomers.map(c => {
+                        const cardKey = `ov-${c.email}`
+                        const cardMailState = resendingMap[cardKey]
+                        return (
+                          <div
+                            key={c.email}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => { setEmail(c.email); handleSearch(c.email) }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEmail(c.email); handleSearch(c.email) } }}
+                            className="cursor-pointer text-left flex flex-col justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-4 transition-all hover:border-[var(--primary)] hover:shadow-[0_10px_30px_-15px_rgba(255,209,0,0.2)] group"
+                          >
+                            <div>
+                              <div className="flex items-center gap-3">
+                                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${c.status === 'blacklisted' ? 'bg-red-500/10 text-red-500' : 'bg-[var(--primary)]/10 text-[var(--primary)]'}`}>
+                                  <User size={20} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate font-bold text-[var(--text)] text-sm group-hover:text-[var(--primary)] transition-colors">{c.email}</p>
+                                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)] font-medium">
+                                    <span>{c.orderCount || 0} Order</span>
+                                    <span>•</span>
+                                    <span className="truncate">{fmtActivity(c.lastOrderDate || c.updatedAt || c.createdAt)}</span>
+                                  </div>
                                 </div>
                               </div>
+
+                              {/* Aktivitas Terakhir */}
+                              {(c.lastInvoice || (c.lastGames && c.lastGames.length > 0)) && (
+                                <div className="mt-3 rounded-xl bg-[var(--elevated)]/60 px-2.5 py-2 text-[11px] border border-[var(--border-soft)]/50">
+                                  <div className="flex items-center justify-between gap-1 text-[10px] text-[var(--text-3)] mb-1">
+                                    <span className="font-semibold uppercase tracking-wider">Aktivitas Terakhir</span>
+                                    {c.lastInvoice && <span className="font-mono text-[var(--text-2)] font-semibold">{c.lastInvoice}</span>}
+                                  </div>
+                                  {c.lastGames && c.lastGames.length > 0 && (
+                                    <p className="truncate font-medium text-[var(--text)] text-[11px]">
+                                      🎮 {c.lastGames.join(', ')}
+                                    </p>
+                                  )}
+                                  <div className="mt-2 flex items-center justify-end border-t border-[var(--border-soft)]/40 pt-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleResendOrderEmail({
+                                        invoice: c.lastInvoice,
+                                        targetEmail: c.email,
+                                        key: cardKey,
+                                      }, e)}
+                                      disabled={cardMailState === 'sending'}
+                                      className={`pressable inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10.5px] font-bold transition disabled:opacity-50 ${
+                                        cardMailState === 'sent'
+                                          ? 'bg-[var(--success)]/15 text-[#4ade80]'
+                                          : 'bg-[var(--primary)]/12 text-[var(--primary)] hover:bg-[var(--primary)]/22'
+                                      }`}
+                                      title="Kirim ulang email konfirmasi pesanan terakhir"
+                                    >
+                                      {cardMailState === 'sending' ? (
+                                        <><Loader2 size={10} className="animate-spin" /> Mengirim...</>
+                                      ) : cardMailState === 'sent' ? (
+                                        <><Check size={10} /> Terkirim!</>
+                                      ) : (
+                                        <><Mail size={10} /> Kirim Ulang Email</>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
-                            {/* Aktivitas Terakhir */}
-                            {(c.lastInvoice || (c.lastGames && c.lastGames.length > 0)) && (
-                              <div className="mt-3 rounded-xl bg-[var(--elevated)]/60 px-2.5 py-1.5 text-[11px] border border-[var(--border-soft)]/50">
-                                <div className="flex items-center justify-between gap-1 text-[10px] text-[var(--text-3)] mb-0.5">
-                                  <span className="font-semibold uppercase tracking-wider">Aktivitas Terakhir</span>
-                                  {c.lastInvoice && <span className="font-mono text-[var(--text-2)] font-semibold">{c.lastInvoice}</span>}
-                                </div>
-                                {c.lastGames && c.lastGames.length > 0 && (
-                                  <p className="truncate font-medium text-[var(--text)] text-[11px]">
-                                    🎮 {c.lastGames.join(', ')}
-                                  </p>
-                                )}
+                            {c.bonusPending > 0 && (
+                              <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--primary)]/10 px-3 py-1.5 border border-[var(--primary)]/20">
+                                <span className="text-[10px] font-bold text-[var(--primary)] uppercase tracking-wider">Hak Bonus:</span>
+                                <span className="text-[12px] font-black text-[var(--primary)]">{c.bonusPending} Game</span>
                               </div>
                             )}
                           </div>
-
-                          {c.bonusPending > 0 && (
-                            <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--primary)]/10 px-3 py-1.5 border border-[var(--primary)]/20">
-                              <span className="text-[10px] font-bold text-[var(--primary)] uppercase tracking-wider">Hak Bonus:</span>
-                              <span className="text-[12px] font-black text-[var(--primary)]">{c.bonusPending} Game</span>
-                            </div>
-                          )}
-                        </button>
-                      ))}
+                        )
+                      })}
                     </div>
 
                     {/* Pagination / Load more */}
@@ -933,7 +1090,7 @@ export default function CustomerCRMPage() {
             <pre className="mono max-h-[50vh] overflow-y-auto whitespace-pre-wrap p-5 text-xs leading-relaxed text-[var(--text-2)] bg-[var(--surface)]">
               {resend.message}
             </pre>
-            <div className="border-t border-[var(--border-soft)] p-4 bg-[var(--elevated)]/20">
+            <div className="border-t border-[var(--border-soft)] p-4 bg-[var(--elevated)]/20 space-y-2">
               <button
                 type="button"
                 onClick={copyResend}
@@ -949,6 +1106,26 @@ export default function CustomerCRMPage() {
                   </>
                 )}
               </button>
+              {resend.email && (
+                <button
+                  type="button"
+                  onClick={(e) => handleResendOrderEmail({
+                    invoice: resend.invoice,
+                    targetEmail: resend.email,
+                    key: `modal-${resend.invoice}`,
+                  }, e)}
+                  disabled={resendingMap[`modal-${resend.invoice}`] === 'sending'}
+                  className="pressable flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] py-2.5 text-xs font-bold text-[var(--text)] transition hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:opacity-50"
+                >
+                  {resendingMap[`modal-${resend.invoice}`] === 'sending' ? (
+                    <><Loader2 size={14} className="animate-spin" /> Mengirim Email ke {resend.email}...</>
+                  ) : resendingMap[`modal-${resend.invoice}`] === 'sent' ? (
+                    <><Check size={14} className="text-[#4ade80]" /> Email Terkirim ke {resend.email}!</>
+                  ) : (
+                    <><Mail size={14} className="text-[var(--primary)]" /> Kirim Ulang Email ke {resend.email}</>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>,

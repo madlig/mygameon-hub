@@ -170,47 +170,80 @@ export default function DownloadHubPage() {
     }
   }
 
-  async function handlePauseTask(taskId) {
+  async function handlePauseTask(taskId, isPackage = false) {
     dispatchAction({ type: 'SET_TASK_CONTROL', key: taskId, value: 'pause' })
     try {
-      await fetch('/api/download/control', {
+      const res = await fetch('/api/download/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'pause_task', taskId })
+        body: JSON.stringify({
+          action: isPackage ? 'pause_package' : 'pause',
+          taskId,
+          packageName: isPackage ? taskId : undefined
+        })
       })
-      fetchStatus(true)
-    } catch (_) {}
-    finally {
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Unduhan Dijeda', description: json.message || 'Proses unduh dijeda sementara.', variant: 'info' })
+        fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Menjeda', description: json.error || json.message || 'Gagal menjeda unduhan.', variant: 'error' })
+      }
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
       dispatchAction({ type: 'SET_TASK_CONTROL', key: taskId, value: null })
     }
   }
 
-  async function handleResumeTask(taskId) {
+  async function handleResumeTask(taskId, isPackage = false) {
     dispatchAction({ type: 'SET_TASK_CONTROL', key: taskId, value: 'resume' })
     try {
-      await fetch('/api/download/control', {
+      const res = await fetch('/api/download/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'resume_task', taskId })
+        body: JSON.stringify({
+          action: isPackage ? 'resume_package' : 'resume',
+          taskId,
+          packageName: isPackage ? taskId : undefined
+        })
       })
-      fetchStatus(true)
-    } catch (_) {}
-    finally {
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Unduhan Dimulai / Diulang', description: json.message || 'Melanjutkan proses pengunduhan.', variant: 'success' })
+        fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Melanjutkan', description: json.error || json.message || 'Gagal memulai ulang unduhan.', variant: 'error' })
+      }
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
       dispatchAction({ type: 'SET_TASK_CONTROL', key: taskId, value: null })
     }
   }
 
-  async function handleCancelTask(taskId) {
+  async function handleCancelTask(taskId, isPackage = false) {
     dispatchAction({ type: 'SET_TASK_CONTROL', key: taskId, value: 'cancel' })
     try {
-      await fetch('/api/download/control', {
+      const res = await fetch('/api/download/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'cancel_task', taskId })
+        body: JSON.stringify({
+          action: isPackage ? 'cancel_package' : 'cancel',
+          taskId,
+          packageName: isPackage ? taskId : undefined
+        })
       })
-      fetchStatus(true)
-    } catch (_) {}
-    finally {
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Unduhan Dibatalkan', description: json.message || 'Tugas telah dihapus dari antrean.', variant: 'success' })
+        fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Membatalkan', description: json.error || json.message || 'Gagal membatalkan unduhan.', variant: 'error' })
+      }
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
       dispatchAction({ type: 'SET_TASK_CONTROL', key: taskId, value: null })
     }
   }
@@ -221,31 +254,89 @@ export default function DownloadHubPage() {
       const res = await fetch('/api/download/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start_staged', packageKey: key })
+        body: JSON.stringify({ action: 'start_package', packageName: key, packageKey: key })
       })
       const json = await res.json()
       if (json.success) {
         toast({ title: 'Unduhan Dimulai', description: 'Paket berhasil masuk ke antrean unduh aktif.', variant: 'success' })
         fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Memulai Paket', description: json.error || json.message, variant: 'error' })
       }
-    } catch (_) {}
-    finally {
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
       dispatchAction({ type: 'SET_STAGED', key, value: null })
+    }
+  }
+
+  async function handleStartStagedItem(taskId) {
+    dispatchAction({ type: 'SET_STAGED', key: taskId, value: 'start' })
+    try {
+      const res = await fetch('/api/download/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start_task', taskId })
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'File Masuk Antrean Unduh', description: json.message, variant: 'success' })
+        fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Memulai File', description: json.error || json.message, variant: 'error' })
+      }
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
+      dispatchAction({ type: 'SET_STAGED', key: taskId, value: null })
     }
   }
 
   async function handleRemoveStagedPackage(key) {
     dispatchAction({ type: 'SET_STAGED', key, value: 'remove' })
     try {
-      await fetch('/api/download/control', {
+      const res = await fetch('/api/download/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'remove_staged', packageKey: key })
+        body: JSON.stringify({ action: 'remove_staged', packageName: key, packageKey: key })
       })
-      fetchStatus(true)
-    } catch (_) {}
-    finally {
+      const json = await res.json()
+      if (json.success) {
+        toast({ title: 'Paket Dihapus', description: `Paket "${key}" dihapus dari penampungan.`, variant: 'info' })
+        fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Menghapus Paket', description: json.error || json.message, variant: 'error' })
+      }
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
       dispatchAction({ type: 'SET_STAGED', key, value: null })
+    }
+  }
+
+  async function handleRemoveStagedItem(taskId, label = '') {
+    dispatchAction({ type: 'SET_STAGED', key: taskId, value: 'remove' })
+    try {
+      const res = await fetch('/api/download/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove_staged', taskId })
+      })
+      const json = await res.json()
+      if (json.success) {
+        toast({
+          title: 'File/Part Dihapus dari Penampungan',
+          description: label ? `Berkas "${label}" berhasil dihapus sebelum unduhan dimulai.` : 'Berkas tautan dihapus dari penampungan.',
+          variant: 'info'
+        })
+        fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Menghapus Part', description: json.error || json.message, variant: 'error' })
+      }
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
+      dispatchAction({ type: 'SET_STAGED', key: taskId, value: null })
     }
   }
 
@@ -259,11 +350,14 @@ export default function DownloadHubPage() {
       })
       const json = await res.json()
       if (json.success) {
-        toast({ title: 'Semua Paket Dimulai', description: `${json.startedCount || 0} tugas berhasil dimasukkan ke antrean.`, variant: 'success' })
+        toast({ title: 'Semua Paket Dimulai', description: json.message || 'Semua paket tertampung dimasukkan ke antrean.', variant: 'success' })
         fetchStatus(true)
+      } else {
+        toast({ title: 'Gagal Memulai Semua', description: json.error || json.message, variant: 'error' })
       }
-    } catch (_) {}
-    finally {
+    } catch (err) {
+      toast({ title: 'Kesalahan Sistem', description: err.message, variant: 'error' })
+    } finally {
       dispatchAction({ type: 'SET_STARTING_ALL', value: false })
     }
   }
@@ -478,6 +572,8 @@ export default function DownloadHubPage() {
           stagedPackages={data.stagedPackages}
           onStartPackage={handleStartStagedPackage}
           onRemovePackage={handleRemoveStagedPackage}
+          onRemoveItem={handleRemoveStagedItem}
+          onStartItem={handleStartStagedItem}
           onStartAll={handleStartAllStaged}
           isStartingAll={actionState.startingAll}
           actionLoading={actionState.staged}
@@ -500,6 +596,7 @@ export default function DownloadHubPage() {
             <div className="space-y-3">
               {data.activeGroups.map((group) => {
                 const isExpanded = !!expandedActiveGroups[group.key]
+                const targetId = group.isPackage ? group.key : (group.items?.[0]?.id || group.key)
                 return (
                   <ActiveDownloadItem
                     key={group.key}
@@ -508,10 +605,13 @@ export default function DownloadHubPage() {
                     onToggleExpand={() =>
                       setExpandedActiveGroups((prev) => ({ ...prev, [group.key]: !prev[group.key] }))
                     }
-                    onPause={() => handlePauseTask(group.items?.[0]?.id || group.key)}
-                    onResume={() => handleResumeTask(group.items?.[0]?.id || group.key)}
-                    onCancel={() => handleCancelTask(group.items?.[0]?.id || group.key)}
-                    actionLoading={actionState.taskControl[group.items?.[0]?.id || group.key]}
+                    onPause={() => handlePauseTask(targetId, group.isPackage)}
+                    onResume={() => handleResumeTask(targetId, group.isPackage)}
+                    onCancel={() => handleCancelTask(targetId, group.isPackage)}
+                    onRetryPart={(partId) => handleResumeTask(partId, false)}
+                    onCancelPart={(partId) => handleCancelTask(partId, false)}
+                    actionLoading={actionState.taskControl[targetId]}
+                    partActionLoading={actionState.taskControl}
                   />
                 )
               })}

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   ClipboardList, AlertCircle, Search, Download, Copy, CheckCheck, Send,
   KeyRound, Hourglass, CalendarDays, Gamepad2, ShoppingBag, Gift, Sparkles,
-  ReceiptText
+  ReceiptText, Mail, Loader2, Check
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import StatCard from '@/components/shared/StatCard'
@@ -86,8 +86,36 @@ export default function LogPage() {
   const [error, setError]     = useState(null)
   const [exporting, setExporting] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
+  const [resendingMap, setResendingMap] = useState({})
+  const [resendFeedback, setResendFeedback] = useState(null)
   const debounceRef = useRef(null)
   const reqIdRef = useRef(0)
+
+  async function handleResendOrderEmail(ord, key) {
+    setResendingMap(prev => ({ ...prev, [key]: 'sending' }))
+    setResendFeedback(null)
+    try {
+      const res = await fetch('/api/send/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: ord.id, invoice: ord.invoice, email: ord.email }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setResendingMap(prev => ({ ...prev, [key]: 'sent' }))
+        setResendFeedback({ type: 'success', text: data.message || `Email berhasil dikirim ulang ke ${ord.email}!` })
+        setTimeout(() => {
+          setResendingMap(prev => ({ ...prev, [key]: null }))
+        }, 3500)
+      } else {
+        setResendingMap(prev => ({ ...prev, [key]: 'error' }))
+        setResendFeedback({ type: 'error', text: data.error || 'Gagal mengirim ulang email.' })
+      }
+    } catch {
+      setResendingMap(prev => ({ ...prev, [key]: 'error' }))
+      setResendFeedback({ type: 'error', text: 'Gagal terhubung ke server saat mengirim ulang email.' })
+    }
+  }
 
   async function fetchLogs(m, f, p, q) {
     const myId = ++reqIdRef.current
@@ -290,6 +318,24 @@ export default function LogPage() {
         {total} {mode === 'orders' ? 'pesanan' : 'entri'}{query ? ' ditemukan' : ''}
       </p>
 
+      {/* Resend Feedback Banner */}
+      {resendFeedback && (
+        <div
+          className={`mb-4 flex items-start gap-2 rounded-xl border px-4 py-3 text-xs font-semibold ${
+            resendFeedback.type === 'success'
+              ? 'border-[var(--success)]/30 bg-[var(--success)]/10 text-[#4ade80]'
+              : 'border-[var(--danger)]/30 bg-[var(--danger)]/10 text-[#fca5a5]'
+          }`}
+        >
+          {resendFeedback.type === 'success' ? (
+            <Check size={15} className="mt-0.5 shrink-0" />
+          ) : (
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+          )}
+          <span>{resendFeedback.text}</span>
+        </div>
+      )}
+
       {/* Error */}
       {error && !isLoading && (
         <div className="mb-4 flex items-start gap-1.5 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-4 py-3 text-sm text-[#fca5a5]">
@@ -314,6 +360,8 @@ export default function LogPage() {
             <div className="stagger grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
               {g.items.map((ord, i) => {
                 const id = `${gi}-${i}`
+                const mailKey = `ord-${ord.id || ord.invoice || id}`
+                const mailState = resendingMap[mailKey]
                 return (
                   <div key={ord.id || i} className="flex flex-col justify-between rounded-2xl border border-[var(--border-soft)] bg-[var(--surface)] p-3.5 transition-all hover:border-[var(--border-strong)]">
                     <div>
@@ -391,17 +439,37 @@ export default function LogPage() {
                       </div>
                     </div>
 
-                    {/* Footer Bonus Kuota jika ada */}
-                    {ord.bonusEligible > 0 && (
-                      <div className="mt-3 flex items-center justify-between border-t border-[var(--border-soft)]/60 pt-2 text-[10px]">
+                    {/* Footer Bonus Kuota & Kirim Ulang Email */}
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-soft)]/60 pt-2.5 text-[10px]">
+                      {ord.bonusEligible > 0 ? (
                         <span className="flex items-center gap-1 font-bold text-[var(--primary)]">
-                          <Sparkles size={11} /> Hak Bonus: {ord.bonusEligible} Game
+                          <Sparkles size={11} /> Bonus: {ord.bonusClaimed || 0}/{ord.bonusEligible}
                         </span>
-                        <span className="text-[var(--text-3)]">
-                          {ord.bonusClaimed > 0 ? `${ord.bonusClaimed} diklaim` : 'Belum diklaim'}
-                        </span>
-                      </div>
-                    )}
+                      ) : (
+                        <span className="text-[var(--text-3)]">Pesanan selesai</span>
+                      )}
+
+                      {ord.email && (
+                        <button
+                          type="button"
+                          onClick={() => handleResendOrderEmail(ord, mailKey)}
+                          disabled={mailState === 'sending'}
+                          className={`pressable ml-auto flex items-center gap-1 rounded-xl px-2.5 py-1 text-[10.5px] font-bold transition disabled:opacity-50 ${
+                            mailState === 'sent'
+                              ? 'bg-[var(--success)]/15 text-[#4ade80] border border-[var(--success)]/30'
+                              : 'bg-[var(--primary)]/15 text-[var(--primary)] hover:bg-[var(--primary)]/25'
+                          }`}
+                        >
+                          {mailState === 'sending' ? (
+                            <><Loader2 size={11} className="animate-spin" /> Mengirim...</>
+                          ) : mailState === 'sent' ? (
+                            <><Check size={11} /> Email Terkirim!</>
+                          ) : (
+                            <><Mail size={11} /> Kirim Ulang Email</>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               })}

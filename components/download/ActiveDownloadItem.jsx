@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { DownloadCloud, Pause, Play, Square, ChevronDown, ChevronRight, Loader2, AlertCircle } from 'lucide-react'
+import { Pause, Play, Square, ChevronDown, ChevronRight, Loader2, AlertCircle, RotateCcw, Trash2 } from 'lucide-react'
 
 export default function ActiveDownloadItem({
   group,
@@ -10,7 +9,10 @@ export default function ActiveDownloadItem({
   onPause,
   onResume,
   onCancel,
-  actionLoading = null // 'pause' | 'resume' | 'cancel' | null
+  onRetryPart,
+  onCancelPart,
+  actionLoading = null, // 'pause' | 'resume' | 'cancel' | null
+  partActionLoading = {}
 }) {
   const isDownloading = group.status === 'downloading'
   const isPaused = group.status === 'paused'
@@ -18,16 +20,22 @@ export default function ActiveDownloadItem({
   const isError = group.status === 'error'
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/40 p-4 transition-all shadow-md space-y-3">
+    <div
+      className={`rounded-2xl border p-4 transition-all shadow-md space-y-3 ${
+        isError
+          ? 'border-rose-500/30 bg-rose-950/15'
+          : 'border-white/10 bg-black/40'
+      }`}
+    >
       {/* Header Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         <div className="min-w-0 flex items-center gap-2">
-          {group.isPackage && (
+          {(group.isPackage || (group.items && group.items.length > 0)) && (
             <button
               type="button"
               onClick={onToggleExpand}
               className="text-zinc-400 hover:text-white p-0.5 rounded cursor-pointer"
-              title={isExpanded ? 'Tutup daftar part' : 'Lihat rincian part'}
+              title={isExpanded ? 'Tutup rincian part' : 'Lihat rincian part'}
             >
               {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             </button>
@@ -38,15 +46,17 @@ export default function ActiveDownloadItem({
               <h4 className="font-bold text-sm text-white truncate max-w-sm sm:max-w-md">
                 {group.cleanTitle || group.packageName}
               </h4>
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold border ${
-                isDownloading
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
-                  : isPaused
-                  ? 'bg-zinc-700/30 text-zinc-300 border-white/10'
-                  : isQueued
-                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-              }`}>
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold border ${
+                  isDownloading
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
+                    : isPaused
+                    ? 'bg-zinc-700/30 text-zinc-300 border-white/10'
+                    : isQueued
+                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                }`}
+              >
                 {group.statusText}
               </span>
               {group.isPackage && (
@@ -60,11 +70,11 @@ export default function ActiveDownloadItem({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 shrink-0">
-          {isDownloading ? (
+          {isDownloading || isQueued ? (
             <button
               type="button"
               onClick={onPause}
-              disabled={actionLoading === 'pause'}
+              disabled={Boolean(actionLoading)}
               className="inline-flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 text-xs font-bold text-amber-300 transition-all cursor-pointer disabled:opacity-50"
               title="Jeda unduhan ini"
             >
@@ -75,27 +85,46 @@ export default function ActiveDownloadItem({
             <button
               type="button"
               onClick={onResume}
-              disabled={actionLoading === 'resume'}
+              disabled={Boolean(actionLoading)}
               className="inline-flex items-center gap-1 rounded-xl bg-emerald-500 text-black hover:brightness-110 px-3 py-1.5 text-xs font-black transition-all cursor-pointer disabled:opacity-50"
               title="Lanjutkan unduhan ini"
             >
               {actionLoading === 'resume' ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
               <span>Lanjut</span>
             </button>
+          ) : isError ? (
+            <button
+              type="button"
+              onClick={onResume}
+              disabled={Boolean(actionLoading)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 text-black hover:brightness-110 px-3 py-1.5 text-xs font-black transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+              title="Coba unduh ulang dari awal / lanjutkan"
+            >
+              {actionLoading === 'resume' ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+              <span>Download Ulang</span>
+            </button>
           ) : null}
 
           <button
             type="button"
             onClick={onCancel}
-            disabled={actionLoading === 'cancel'}
+            disabled={Boolean(actionLoading)}
             className="inline-flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1.5 text-xs font-bold text-rose-300 transition-all cursor-pointer disabled:opacity-50"
-            title="Batalkan dan hapus dari antrean"
+            title="Batalkan dan hapus dari antrean unduhan"
           >
             {actionLoading === 'cancel' ? <Loader2 size={12} className="animate-spin" /> : <Square size={11} />}
             <span>Batal</span>
           </button>
         </div>
       </div>
+
+      {/* Error Message Banner if Failed */}
+      {isError && group.error && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-500/25 bg-rose-950/40 px-3 py-2 text-[11px] text-rose-200 font-mono">
+          <AlertCircle size={14} className="text-rose-400 shrink-0 mt-0.5" />
+          <span className="break-all">{group.error}</span>
+        </div>
+      )}
 
       {/* Progress Bar & Metrics */}
       <div className="space-y-1.5">
@@ -106,6 +135,8 @@ export default function ActiveDownloadItem({
                 ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400'
                 : isPaused
                 ? 'bg-zinc-600'
+                : isError
+                ? 'bg-rose-500'
                 : 'bg-blue-400'
             }`}
             style={{ width: `${Math.max(group.progressPercent || 0, 1)}%` }}
@@ -124,7 +155,7 @@ export default function ActiveDownloadItem({
               <span className="text-emerald-300 font-bold">{group.downloadSpeedFormatted}</span>
             )}
             {group.etaFormatted && (
-              <span className="text-zinc-400">{group.etaFormatted}</span>
+              <span className={isError ? 'text-rose-400 font-bold' : 'text-zinc-400'}>{group.etaFormatted}</span>
             )}
           </div>
         </div>
@@ -133,31 +164,63 @@ export default function ActiveDownloadItem({
       {/* Expanded Parts List */}
       {isExpanded && group.items && group.items.length > 0 && (
         <div className="pt-2 border-t border-white/5 space-y-1.5 text-xs">
-          {group.items.map((sub, idx) => (
-            <div
-              key={sub.id || idx}
-              className="flex items-center justify-between p-2 rounded-xl bg-black/30 border border-white/5 font-mono text-[11px]"
-            >
-              <div className="truncate max-w-xs sm:max-w-md text-zinc-300">
-                <span className="text-zinc-500 mr-2">Part {idx + 1}</span>
-                {sub.folderName || sub.cleanTitle}
+          {group.items.map((sub, idx) => {
+            const pLoading = partActionLoading[sub.id]
+            return (
+              <div
+                key={sub.id || idx}
+                className="flex items-center justify-between gap-2 p-2 rounded-xl bg-black/30 border border-white/5 font-mono text-[11px]"
+              >
+                <div className="truncate max-w-xs sm:max-w-md text-zinc-300">
+                  <span className="text-zinc-500 mr-2">Part {idx + 1}</span>
+                  {sub.folderName || sub.cleanTitle}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-zinc-400">{sub.totalSizeFormatted}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      sub.status === 'downloading'
+                        ? 'text-amber-300 bg-amber-500/10 font-bold'
+                        : sub.status === 'completed'
+                        ? 'text-emerald-300 bg-emerald-500/10'
+                        : sub.status === 'error'
+                        ? 'text-rose-300 bg-rose-500/15 font-bold'
+                        : 'text-zinc-400'
+                    }`}
+                  >
+                    {sub.status === 'error' ? 'Gagal' : sub.statusText || sub.status}
+                  </span>
+
+                  {(sub.status === 'error' || sub.status === 'paused') && onRetryPart && (
+                    <button
+                      type="button"
+                      onClick={() => onRetryPart(sub.id)}
+                      disabled={Boolean(pLoading)}
+                      className="p-1 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30 cursor-pointer disabled:opacity-50"
+                      title="Download ulang part ini"
+                    >
+                      {pLoading === 'resume' ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+                    </button>
+                  )}
+
+                  {sub.status !== 'completed' && onCancelPart && (
+                    <button
+                      type="button"
+                      onClick={() => onCancelPart(sub.id)}
+                      disabled={Boolean(pLoading)}
+                      className="p-1 rounded-lg bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border border-rose-500/30 cursor-pointer disabled:opacity-50"
+                      title="Hapus/batalkan part ini"
+                    >
+                      {pLoading === 'cancel' ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-zinc-400">{sub.totalSizeFormatted}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                  sub.status === 'downloading'
-                    ? 'text-amber-300 bg-amber-500/10 font-bold'
-                    : sub.status === 'completed'
-                    ? 'text-emerald-300 bg-emerald-500/10'
-                    : 'text-zinc-400'
-                }`}>
-                  {sub.statusText || sub.status}
-                </span>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
+

@@ -26,6 +26,7 @@ export default function ActiveUploadHero({
   selectedFolder = null,
   targetWorkspace = null,
   onProcessControl,
+  onResumeUpload,
   onToggleSecondaryView,
   showSecondaryView = false,
   onResetProcessState,
@@ -291,8 +292,14 @@ export default function ActiveUploadHero({
             <>
               <button
                 type="button"
-                onClick={() => onProcessControl?.('resume')}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 py-1.5 text-xs font-black text-black hover:brightness-110 transition-all cursor-pointer"
+                onClick={() => {
+                  if (onResumeUpload) {
+                    onResumeUpload()
+                  } else {
+                    onProcessControl?.('resume')
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 py-1.5 text-xs font-black text-black hover:brightness-110 transition-all cursor-pointer shadow-sm"
               >
                 <Play size={13} className="fill-current" />
                 <span>Coba Lanjutkan</span>
@@ -360,6 +367,27 @@ export default function ActiveUploadHero({
           </button>
         )}
       </div>
+
+      {/* ── BANNER DIAGNOSTIK ERROR & RECOVERY ── */}
+      {isError && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 space-y-2 text-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 text-rose-300 font-bold">
+            <AlertTriangle size={15} className="text-rose-400 shrink-0" />
+            <span>{processState.errorDetail?.title || processState.text || 'Operasi Terputus atau Mengalami Gangguan'}</span>
+          </div>
+          {processState.errorDetail?.cause && (
+            <p className="text-[var(--text-3)] text-[11px] leading-relaxed">
+              <strong className="text-[var(--text-2)]">Penyebab:</strong> {processState.errorDetail.cause}
+            </p>
+          )}
+          {processState.errorDetail?.solution && (
+            <div className="flex items-start gap-2 bg-black/40 border border-white/5 rounded-lg p-2.5 text-[11px] text-amber-200/90 leading-relaxed">
+              <CheckCircle2 size={13} className="text-emerald-400 shrink-0 mt-0.5" />
+              <span>{processState.errorDetail.solution}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 3. 4 KARTU TELEMETRI (MINIMALIST & PRESISI) ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">

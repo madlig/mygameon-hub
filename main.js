@@ -74,37 +74,38 @@ function resolveEnvConfig() {
   let parsedEnv = {};
   let sourceFound = null;
 
-  for (const p of possiblePaths) {
+  // Baca dan gabungkan (merge) semua file .env.local yang ditemukan
+  // agar kunci baru (seperti GMAIL_APP_PASSWORD dan CLOUDFLARE_TUNNEL_DOMAIN) tidak hilang
+  const reversedPaths = [...possiblePaths].reverse();
+  for (const p of reversedPaths) {
     if (fs.existsSync(p)) {
       try {
         const parsed = parseEnvFile(p);
-        if (parsed.MONGODB_URI || parsed.GOOGLE_CLIENT_ID || parsed.ADMIN_EMAIL || parsed.AUTH_SECRET || parsed.GEMINI_API_KEY) {
-          parsedEnv = parsed;
+        if (Object.keys(parsed).length > 0) {
+          Object.assign(parsedEnv, parsed);
           sourceFound = p;
-          // If this file has GEMINI_API_KEY, use it as primary
-          if (parsed.GEMINI_API_KEY) {
-            break;
-          }
         }
       } catch (_) {}
     }
   }
 
-  // Ensure persistent copies are synchronized across both AppData folders
+  // Pastikan salinan persistent tersinkronisasi dengan semua kunci terbaru ke folder AppData
   const targetDirs = [
     path.join(appData, 'MyGameON Studio'),
     path.join(appData, 'mygameon-hub'),
   ];
 
-  if (sourceFound) {
+  if (Object.keys(parsedEnv).length > 0) {
+    const serialized = Object.entries(parsedEnv)
+      .map(([k, v]) => `${k}="${v}"`)
+      .join('\n');
+
     for (const dir of targetDirs) {
       const dest = path.join(dir, '.env.local');
       try {
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        if (sourceFound !== dest) {
-          fs.copyFileSync(sourceFound, dest);
-          console.log(`[main] Synced .env.local to: ${dest}`);
-        }
+        fs.writeFileSync(dest, serialized, 'utf-8');
+        console.log(`[main] Synced complete .env.local (${Object.keys(parsedEnv).length} keys) to: ${dest}`);
       } catch (e) {
         console.error(`[main] Failed to sync .env.local to ${dest}:`, e);
       }

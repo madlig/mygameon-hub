@@ -145,29 +145,55 @@ export async function POST(request) {
             }
           }
 
-          // Share Google Drive folder Sims 4
+          // Share Google Drive folder Sims 4 (Prioritaskan WorkspaceAccount pemilik folder di GameCatalog)
           let realSims4FolderId = defaultSims4FolderId
-          if (realSims4FolderId) {
+          if (realSims4FolderId && email) {
             try {
-              const f = await adminDrive.files.get({
-                fileId: realSims4FolderId,
-                fields: 'mimeType, shortcutDetails',
-                supportsAllDrives: true,
-              })
-              if (f.data.mimeType === 'application/vnd.google-apps.shortcut') {
-                realSims4FolderId = f.data.shortcutDetails.targetId
+              const simsCatalogEntries = await GameCatalog.find({
+                $or: [
+                  { folderId: realSims4FolderId },
+                  { name: { $regex: 'sims 4', $options: 'i' } }
+                ]
+              }).sort({ sendCount: 1 }).lean()
+
+              let sharedViaWorkspace = false
+              for (const entry of simsCatalogEntries) {
+                if (!entry.ownerEmail || !entry.folderId) continue
+                try {
+                  const wsDrive = await getClientForEmail(entry.ownerEmail)
+                  await wsDrive.permissions.create({
+                    fileId: entry.folderId,
+                    supportsAllDrives: true,
+                    sendNotificationEmail: false,
+                    requestBody: { role: 'reader', type: 'user', emailAddress: email },
+                  })
+                  realSims4FolderId = entry.folderId
+                  sharedViaWorkspace = true
+                  break
+                } catch (_) {}
               }
 
-              await adminDrive.permissions.create({
-                fileId: realSims4FolderId,
-                supportsAllDrives: true,
-                sendNotificationEmail: false,
-                requestBody: {
-                  role: 'reader',
-                  type: 'user',
-                  emailAddress: email,
-                },
-              })
+              if (!sharedViaWorkspace) {
+                const f = await adminDrive.files.get({
+                  fileId: realSims4FolderId,
+                  fields: 'mimeType, shortcutDetails',
+                  supportsAllDrives: true,
+                })
+                if (f.data.mimeType === 'application/vnd.google-apps.shortcut') {
+                  realSims4FolderId = f.data.shortcutDetails.targetId
+                }
+
+                await adminDrive.permissions.create({
+                  fileId: realSims4FolderId,
+                  supportsAllDrives: true,
+                  sendNotificationEmail: false,
+                  requestBody: {
+                    role: 'reader',
+                    type: 'user',
+                    emailAddress: email,
+                  },
+                })
+              }
             } catch (e) {
               console.error('Sims 4 Drive permission error:', e.message)
             }

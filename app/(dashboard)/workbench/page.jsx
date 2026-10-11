@@ -238,9 +238,14 @@ export default function WorkbenchPage() {
 
   // ── Eksekusi Single Upload / Archive / Extract ──
   const startProcessing = async (action = 'upload', uploadOptions = {}) => {
-    if (!selectedFolder) return
+    const targetPath = uploadOptions.folderPath || selectedFolder?.path
+    if (!targetPath) {
+      toast('Pilih folder game terlebih dahulu', 'error')
+      return
+    }
     const isUploadAction = action === 'upload' || action === 'extract_and_upload'
-    if (isUploadAction && !targetWorkspace) {
+    const emailToUse = uploadOptions.targetEmail || targetWorkspace?.email
+    if (isUploadAction && !emailToUse) {
       toast('Pilih akun Google Drive terlebih dahulu', 'error')
       return
     }
@@ -253,16 +258,17 @@ export default function WorkbenchPage() {
           ? 'kompresi WinRAR'
           : 'upload ke Google Drive'
 
+      const folderName = selectedFolder?.name || uploadOptions.gameName || ''
       const res = await fetch('/api/studio/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          folderPath: selectedFolder.path,
+          folderPath: targetPath,
           targetFilePath: uploadOptions.targetFilePath || null,
-          targetEmail: targetWorkspace?.email || null,
+          targetEmail: emailToUse,
           action,
-          mode: uploadMode,
-          customTitle: customCatalogTitle || cleanReleaseName(selectedFolder.name),
+          mode: uploadOptions.mode || uploadMode,
+          customTitle: uploadOptions.customTitle || customCatalogTitle || (folderName ? cleanReleaseName(folderName) : null),
           cleanReplace: uploadOptions.cleanReplace ?? cleanReplace,
           config: uploadOptions.config || rarConfig,
           targetFolderId: uploadOptions.targetFolderId || null,

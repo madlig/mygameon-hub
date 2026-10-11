@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Search, KeyRound, AlertCircle, Check, Copy, CheckCheck, Send, X, Calendar } from 'lucide-react'
+import { Search, KeyRound, AlertCircle, Check, Copy, CheckCheck, Send, X, Calendar, Mail, Loader2 } from 'lucide-react'
 import StatCard from '@/components/shared/StatCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { buildSims4DeliveryMessage } from '@/lib/sims4'
@@ -45,6 +45,7 @@ export default function Sims4LicensesTab({ onSelectEmail }) {
   const [isActing, setIsActing] = useState(false)
   const [copiedKey, setCopiedKey] = useState(null)
   const [resend, setResend]     = useState(null)
+  const [resendingMap, setResendingMap] = useState({})
   const [copiedMsg, setCopiedMsg] = useState(false)
   const [mounted, setMounted]   = useState(false)
   const debounceRef = useRef(null)
@@ -135,7 +136,43 @@ export default function Sims4LicensesTab({ onSelectEmail }) {
 
   function openResend(lic) {
     setCopiedMsg(false)
-    setResend({ invoice: lic.invoice, message: buildSims4DeliveryMessage(lic.invoice, lic.cc === 'Y') })
+    setResend({
+      invoice: lic.invoice,
+      email: lic.email,
+      message: buildSims4DeliveryMessage(lic.invoice, lic.cc === 'Y')
+    })
+  }
+
+  async function handleResendEmail(lic, e) {
+    if (e) e.stopPropagation()
+    const key = lic.invoice
+    if (!lic.email) {
+      setActionMsg({ type: 'error', text: `Lisensi ${lic.invoice} tidak memiliki email pembeli.` })
+      return
+    }
+    setResendingMap(prev => ({ ...prev, [key]: 'sending' }))
+    setActionMsg(null)
+    try {
+      const res = await fetch('/api/send/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice: lic.invoice, email: lic.email }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setResendingMap(prev => ({ ...prev, [key]: 'sent' }))
+        setActionMsg({ type: 'success', text: data.message || `Email berhasil dikirim ulang ke ${lic.email}` })
+        setTimeout(() => {
+          setResendingMap(prev => ({ ...prev, [key]: null }))
+        }, 3500)
+      } else {
+        setResendingMap(prev => ({ ...prev, [key]: 'error' }))
+        setActionMsg({ type: 'error', text: data.error || 'Gagal mengirim ulang email.' })
+      }
+    } catch (_) {
+      setResendingMap(prev => ({ ...prev, [key]: 'error' }))
+      setActionMsg({ type: 'error', text: 'Gagal terhubung ke server.' })
+    }
   }
 
   function copyResend() {
@@ -224,6 +261,7 @@ export default function Sims4LicensesTab({ onSelectEmail }) {
           {licenses.map((lic, i) => {
             const created = fmtDate(lic.createdAt)
             const isLocked = !!(lic.hwid || (Array.isArray(lic.hwids) && lic.hwids.length > 0))
+            const mailState = resendingMap[lic.invoice]
             return (
               <div
                 key={lic._id || i}
@@ -340,13 +378,36 @@ export default function Sims4LicensesTab({ onSelectEmail }) {
                       Unban
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => openResend(lic)}
-                    className="pressable ml-auto flex items-center gap-1 rounded-xl bg-[var(--primary)]/15 px-2.5 py-1 text-[11px] font-bold text-[var(--primary)] transition hover:bg-[var(--primary)]/25"
-                  >
-                    <Send size={11} /> Kirim Ulang
-                  </button>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {lic.email && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleResendEmail(lic, e)}
+                        disabled={mailState === 'sending'}
+                        className={`pressable flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[11px] font-bold transition disabled:opacity-50 ${
+                          mailState === 'sent'
+                            ? 'border-[var(--success)]/40 bg-[var(--success)]/15 text-[#4ade80]'
+                            : 'border-[var(--border-soft)] bg-[var(--elevated)] text-[var(--text-2)] hover:border-[var(--primary)] hover:text-[var(--primary)]'
+                        }`}
+                        title="Kirim ulang email konfirmasi ke pembeli"
+                      >
+                        {mailState === 'sending' ? (
+                          <><Loader2 size={11} className="animate-spin" /> Mengirim...</>
+                        ) : mailState === 'sent' ? (
+                          <><Check size={11} /> Terkirim</>
+                        ) : (
+                          <><Mail size={11} /> Kirim Email</>
+                        )}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => openResend(lic)}
+                      className="pressable flex items-center gap-1 rounded-xl bg-[var(--primary)]/15 px-2.5 py-1 text-[11px] font-bold text-[var(--primary)] transition hover:bg-[var(--primary)]/25"
+                    >
+                      <Send size={11} /> Teks Chat
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -412,7 +473,7 @@ export default function Sims4LicensesTab({ onSelectEmail }) {
               <pre className="mono max-h-[50vh] overflow-y-auto whitespace-pre-wrap p-5 text-xs leading-relaxed text-[var(--text-2)] bg-[var(--surface)]">
                 {resend.message}
               </pre>
-              <div className="border-t border-[var(--border-soft)] p-4 bg-[var(--elevated)]/20">
+              <div className="border-t border-[var(--border-soft)] p-4 bg-[var(--elevated)]/20 space-y-2">
                 <button
                   type="button"
                   onClick={copyResend}
@@ -428,6 +489,22 @@ export default function Sims4LicensesTab({ onSelectEmail }) {
                     </>
                   )}
                 </button>
+                {resend.email && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleResendEmail(resend, e)}
+                    disabled={resendingMap[resend.invoice] === 'sending'}
+                    className="pressable flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] py-2.5 text-xs font-bold text-[var(--text)] transition hover:border-[var(--primary)] hover:text-[var(--primary)] disabled:opacity-50"
+                  >
+                    {resendingMap[resend.invoice] === 'sending' ? (
+                      <><Loader2 size={14} className="animate-spin" /> Mengirim Email ke {resend.email}...</>
+                    ) : resendingMap[resend.invoice] === 'sent' ? (
+                      <><Check size={14} className="text-[#4ade80]" /> Email Terkirim ke {resend.email}!</>
+                    ) : (
+                      <><Mail size={14} className="text-[var(--primary)]" /> Kirim Ulang Email ke {resend.email}</>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>,

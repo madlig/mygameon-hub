@@ -1,40 +1,26 @@
 import { NextResponse } from 'next/server'
-import nodemailer from 'nodemailer'
 import fs from 'fs'
 import path from 'path'
 import { auth } from '@/app/api/auth/[...nextauth]/route'
+import { verifyGmailSmtp } from '@/lib/mailer'
 
 export async function GET() {
+  const adminEmail = (process.env.ADMIN_EMAIL || 'mygameonhub@gmail.com').trim()
   try {
-    const adminEmail = (process.env.ADMIN_EMAIL || 'mygameonhub@gmail.com').trim()
-    const appPassword = (process.env.GMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, '')
-
-    if (!appPassword) {
-      return NextResponse.json({
-        configured: false,
-        adminEmail,
-        message: 'Sandi Aplikasi Gmail belum diatur.'
-      })
-    }
-
-    // Uji koneksi SMTP
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: adminEmail, pass: appPassword }
-    })
-
-    await transporter.verify()
-
+    const res = await verifyGmailSmtp()
     return NextResponse.json({
       configured: true,
-      adminEmail,
-      message: 'Koneksi Gmail SMTP aktif dan siap mengirim email.'
+      adminEmail: res.adminEmail || adminEmail,
+      message: `Koneksi Gmail SMTP (${res.endpoint}) aktif dan siap mengirim email.`
     })
   } catch (err) {
+    const isUnset = err.message && err.message.includes('belum diatur')
     return NextResponse.json({
-      configured: true,
-      adminEmail: process.env.ADMIN_EMAIL,
-      error: err.message || 'Gagal memverifikasi koneksi Gmail'
+      configured: !isUnset,
+      adminEmail,
+      ...(isUnset
+        ? { message: 'Sandi Aplikasi Gmail belum diatur.' }
+        : { error: err.message || 'Gagal memverifikasi koneksi Gmail' })
     })
   }
 }
@@ -56,33 +42,37 @@ export async function POST(req) {
     const adminEmail = (process.env.ADMIN_EMAIL || 'mygameonhub@gmail.com').trim()
 
     // 1. Verifikasi kredensial sebelum disimpan
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: adminEmail, pass: cleanPassword }
-    })
-
     try {
-      await transporter.verify()
+      await verifyGmailSmtp(cleanPassword)
     } catch (verifyErr) {
       return NextResponse.json({
         error: `Verifikasi Google gagal: ${verifyErr.message}. Pastikan 2-Step Verification aktif dan gunakan Sandi Aplikasi 16 karakter dari myaccount.google.com/apppasswords.`
       }, { status: 400 })
     }
 
-    // 2. Simpan ke .env.local
-    try {
-      const envPath = path.join(process.cwd(), '.env.local')
-      let envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
-      if (envText.includes('GMAIL_APP_PASSWORD=')) {
-        envText = envText.replace(/GMAIL_APP_PASSWORD=.*/, `GMAIL_APP_PASSWORD=${cleanPassword}`)
-      } else {
-        envText += `\nGMAIL_APP_PASSWORD=${cleanPassword}\n`
+    // 2. Simpan ke .env.local di seluruh lokasi persistent
+    const envPaths = [
+      path.join(process.cwd(), '.env.local'),
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'MyGameON Studio', '.env.local') : null,
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'mygameon-hub', '.env.local') : null,
+    ].filter(Boolean)
+
+    for (const envPath of envPaths) {
+      try {
+        if (fs.existsSync(path.dirname(envPath))) {
+          let envText = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : ''
+          if (envText.includes('GMAIL_APP_PASSWORD=')) {
+            envText = envText.replace(/GMAIL_APP_PASSWORD=.*/, `GMAIL_APP_PASSWORD=${cleanPassword}`)
+          } else {
+            envText += `\nGMAIL_APP_PASSWORD=${cleanPassword}\n`
+          }
+          fs.writeFileSync(envPath, envText, 'utf8')
+        }
+      } catch (fsErr) {
+        console.warn('[gmail route] Gagal tulis .env.local:', fsErr.message)
       }
-      fs.writeFileSync(envPath, envText, 'utf8')
-      process.env.GMAIL_APP_PASSWORD = cleanPassword
-    } catch (fsErr) {
-      console.warn('[gmail route] Gagal tulis .env.local:', fsErr.message)
     }
+    process.env.GMAIL_APP_PASSWORD = cleanPassword
 
     return NextResponse.json({
       success: true,
