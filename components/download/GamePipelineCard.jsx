@@ -346,16 +346,29 @@ export default function GamePipelineCard({
               {isExtracting ? <Loader2 size={13} className="animate-spin" /> : <Package size={13} />}
               <span>⚡ Ekstrak UnRAR</span>
             </button>
-          ) : item.packageType === 'ISO' || item.hasIso ? (
-            /* KASUS 4: File ISO Siap Pasang ke Pre-Installed */
-            <button
-              type="button"
-              onClick={() => onLaunchInstaller(item.folderName)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2 text-xs font-black text-black hover:brightness-110 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
-            >
-              <Play size={13} />
-              <span>💿 Pasang Game ke Pre-Installed (Silent)</span>
-            </button>
+          ) : item.packageType === 'ISO' || item.hasIso || item.packageType === 'REPACK' ? (
+            /* KASUS 4: File ISO atau Setup Installer (GOG/Repack) Siap Pasang ke Pre-Installed */
+            <>
+              <button
+                type="button"
+                onClick={() => onHandoff(item.folderName, 'new')}
+                disabled={isHandoffLoading}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-300 transition-all cursor-pointer disabled:opacity-50"
+                title="Oper berkas installer ini langsung ke Workbench tanpa menginstal ke Pre-Installed"
+              >
+                {isHandoffLoading ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                <span>Oper ke Workbench</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onLaunchInstaller(item.folderName)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-2 text-xs font-black text-black hover:brightness-110 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+              >
+                <Play size={13} />
+                <span>💿 Pasang Game ke Pre-Installed (Silent)</span>
+              </button>
+            </>
           ) : (
             /* KASUS 5: Pre-Installed Siap Handoff ke Workbench */
             <button
