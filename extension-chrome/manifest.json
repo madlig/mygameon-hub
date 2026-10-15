@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "MyGameON Download Catcher",
+  "version": "1.0.0",
+  "description": "Ekstensi penangkap download eksklusif MyGameON Hub untuk Chrome, Edge, dan Brave.",
+  "author": "MyGameON Studio",
+  "permissions": [
+    "downloads",
+    "cookies",
+    "tabs",
+    "notifications",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:3000/*",
+    "http://localhost:3000/*",
+    "*://*/*"
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "MyGameON Download Catcher",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}

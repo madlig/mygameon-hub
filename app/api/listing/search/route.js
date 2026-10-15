@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveSteamVerticalCover } from '@/lib/steamEnrichment'
 
 // Safe Shopee description header (battle-tested)
 const SAFE_HEADER = `HARAP DIBACA SEBELUM MEMESAN:
@@ -151,7 +152,9 @@ export async function GET(request) {
 
     const game = detailsData[appId].data
     const cleanTitle = cleanGameTitle(game.name || '')
-    const coverUrl = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`
+    // Multi-CDN vertical cover lookup (Akamai -> Cloudflare -> Fastly -> Legacy). Null jika tidak ada (TIDAK PAKAI SCREENSHOT)
+    const coverUrl = (await resolveSteamVerticalCover(appId)) || ''
+    const coverFound = Boolean(coverUrl)
 
     // Extract screenshots
     const screenshots = (game.screenshots || [])
@@ -196,6 +199,7 @@ export async function GET(request) {
         title: cleanTitle,
         originalName: game.name,
         coverUrl,
+        coverFound,
         screenshots,
         genres,
         primaryGenre,

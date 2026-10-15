@@ -59,17 +59,27 @@ export async function GET() {
       if (
         (localState.status === 'processing' || localState.status === 'paused') &&
         isStale &&
+        !ctrlStatus.isRunning &&
         !ctrlStatus.isPaused &&
         !ctrlStatus.hasActiveStream &&
         !ctrlStatus.hasActiveChild
       ) {
+        const isArchiveTask = localState.action === 'archive' || localState.phase === 'archiving'
         localState.status = 'error'
-        localState.text = 'Operasi terputus karena PC/server terestart. Silakan klik tombol Upload kembali untuk melanjutkan.'
+        localState.text = isArchiveTask
+          ? 'Proses kompresi WinRAR terputus. Silakan klik tombol Ulangi Kompresi untuk memulai kembali.'
+          : 'Operasi terputus karena PC/server terestart. Silakan klik tombol Upload kembali untuk melanjutkan.'
         localState.errorDetail = {
           category: 'RESTART_RECOVERY',
-          title: 'Koneksi Terputus (PC / Server Terestart)',
-          cause: 'Proses upload terhenti karena komputer atau aplikasi dimatikan/direstart.',
-          solution: 'File part yang sudah selesai (100%) aman tersimpan di Google Drive. Klik tombol Upload kembali untuk otomatis menyambung.',
+          title: isArchiveTask
+            ? 'Proses Kompresi WinRAR Terputus'
+            : 'Koneksi Terputus (PC / Server Terestart)',
+          cause: isArchiveTask
+            ? 'Proses kompresi WinRAR berhenti sebelum selesai (kemungkinan aplikasi direstart atau proses dibatalkan paksa).'
+            : 'Proses upload terhenti karena komputer atau aplikasi dimatikan/direstart.',
+          solution: isArchiveTask
+            ? 'Klik tombol Ulangi Kompresi untuk membuat ulang paket part WinRAR 4.1 GB.'
+            : 'File part yang sudah selesai (100%) aman tersimpan di Google Drive. Klik tombol Coba Lanjutkan untuk otomatis menyambung.',
         }
         setLocalJobState(localState)
       }

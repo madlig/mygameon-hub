@@ -1,30 +1,7 @@
-import { Plus_Jakarta_Sans, Bricolage_Grotesque, Geist_Mono } from "next/font/google"
+/* eslint-disable @next/next/no-page-custom-font */
 import "./globals.css"
 import SessionWrapper from "@/components/SessionWrapper"
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister"
-
-const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  display: "swap",
-  preload: true,
-})
-
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  display: "swap",
-  preload: true,
-})
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-  display: "swap",
-  preload: true,
-})
 
 export const metadata = {
   title: 'MyGameON Hub',
@@ -48,8 +25,14 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="id" suppressHydrationWarning className={`dark ${jakarta.variable} ${bricolage.variable} ${geistMono.variable}`}>
+    <html lang="id" suppressHydrationWarning className="dark">
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Geist+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        />
         <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
         <link rel="shortcut icon" href="/icons/icon-192.png" />

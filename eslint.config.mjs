@@ -5,6 +5,7 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   {
     rules: {
+      "no-undef": "error",
       "react-hooks/set-state-in-effect": "warn",
       "react/no-unescaped-entities": "warn",
       "@next/next/no-img-element": "off",
@@ -24,6 +25,8 @@ const eslintConfig = defineConfig([
     ".zcode/**",
     ".agents/**",
     "scripts/**",
+    "extension/**",
+    "extension-chrome/**",
     "next-env.d.ts",
   ]),
 ]);

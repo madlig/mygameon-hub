@@ -76,10 +76,15 @@ export default function ExistingGameSelector({
           {selectedGame ? (
             <div className="flex items-center gap-2.5 min-w-0">
               <Cloud size={15} className="text-amber-400 shrink-0" />
-              <div className="truncate">
+              <div className="truncate flex items-center gap-1.5">
                 <span className="font-bold text-[var(--text)]">{selectedGame.name || selectedGame.title}</span>
+                {selectedGame.fileVersion && (
+                  <span className="rounded bg-amber-400/15 border border-amber-400/30 px-1.5 py-0.5 text-[10px] font-mono font-bold text-amber-300">
+                    {selectedGame.fileVersion}
+                  </span>
+                )}
                 {selectedWsInfo && (
-                  <span className="ml-2 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-3)]">
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-3)]">
                     {selectedWsInfo.name}
                   </span>
                 )}
@@ -119,6 +124,11 @@ export default function ExistingGameSelector({
                 filteredGames.map((game) => {
                   const wsInfo = getWorkspaceInfo(game)
                   const isSelected = selectedGame?._id === game._id || selectedGame?.id === game.id
+                  const displaySize = game.totalBytes
+                    ? formatBytes(game.totalBytes)
+                    : typeof game.size === 'number'
+                    ? formatBytes(game.size)
+                    : game.size || null
 
                   return (
                     <div
@@ -137,10 +147,17 @@ export default function ExistingGameSelector({
                       <div className="flex items-center gap-2 min-w-0">
                         <Cloud size={14} className={isSelected ? 'text-amber-400' : 'text-[var(--text-4)]'} />
                         <div className="truncate">
-                          <p className="font-bold truncate">{game.name || game.title}</p>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <p className="font-bold truncate">{game.name || game.title}</p>
+                            {game.fileVersion && (
+                              <span className="rounded bg-amber-400/15 border border-amber-400/30 px-1.5 py-0.2 text-[9px] font-mono font-bold text-amber-300 shrink-0">
+                                {game.fileVersion}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 text-[10px] font-mono text-[var(--text-4)]">
                             <span>{wsInfo.name}</span>
-                            {game.size ? <span>• {formatBytes(game.size)}</span> : null}
+                            {displaySize && <span>• {displaySize}</span>}
                           </div>
                         </div>
                       </div>

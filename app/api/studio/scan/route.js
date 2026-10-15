@@ -23,6 +23,9 @@ const desktopStateSchema = new mongoose.Schema({
       hasExtractedSubfolder: Boolean,
       isInstallerPackage: Boolean,
       size: Number,
+      folderSize: Number,
+      parentPartsSize: Number,
+      totalDiskSize: Number,
       formattedSize: String,
       mtime: Date
     }
@@ -48,6 +51,34 @@ import { formatBytes } from '@/lib/utils'
 
 export { resolveUploadDirectory, scanLocalDirectory }
 
+function getDirectorySize(dirPath, maxDepth = 8, currentDepth = 1) {
+  if (currentDepth > maxDepth) return 0
+  let total = 0
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true })
+    for (const entry of entries) {
+      if (
+        entry.name.startsWith('.') ||
+        entry.name === '$RECYCLE.BIN' ||
+        entry.name === 'System Volume Information' ||
+        entry.name === 'node_modules'
+      ) {
+        continue
+      }
+      const fullEntryPath = path.join(dirPath, entry.name)
+      try {
+        if (entry.isFile()) {
+          if (!/\.part\d+\.(rar|7z|zip)$/i.test(entry.name)) {
+            total += fs.statSync(fullEntryPath).size
+          }
+        } else if (entry.isDirectory()) {
+          total += getDirectorySize(fullEntryPath, maxDepth, currentDepth + 1)
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return total
+}
 
 function scanLocalDirectory(targetPath) {
   if (!fs.existsSync(targetPath)) return []
@@ -70,35 +101,23 @@ function scanLocalDirectory(targetPath) {
         const normItem = normalize(item)
 
         let insideParts = []
+        let insidePartsSize = 0
         let hasIso = false
         let hasSetupExe = false
         let hasAnyExe = false
         let hasExtractedSubfolder = false
-        let folderSize = 0
+        const folderSize = getDirectorySize(fullPath, 8, 1)
         try {
           const filesInside = fs.readdirSync(fullPath)
-          for (const f of filesInside) {
-            try {
-              const fPath = path.join(fullPath, f)
-              const fStat = fs.statSync(fPath)
-              if (fStat.isFile()) {
-                folderSize += fStat.size
-              } else if (fStat.isDirectory()) {
-                try {
-                  const subFiles = fs.readdirSync(fPath)
-                  for (const sf of subFiles) {
-                    try {
-                      folderSize += fs.statSync(path.join(fPath, sf)).size
-                    } catch (_) {}
-                  }
-                } catch (_) {}
-              }
-            } catch (_) {}
-          }
           insideParts = filesInside.filter((f) => {
             if (!/\.(rar|7z|zip|r\d+|part\d+\.rar)$/i.test(f)) return false
             return itemRegex.test(f) || /\.part\d+\.rar$/i.test(f) || f.toLowerCase().endsWith('.rar')
           })
+          for (const ip of insideParts) {
+            try {
+              insidePartsSize += fs.statSync(path.join(fullPath, ip)).size
+            } catch (_) {}
+          }
           hasIso = filesInside.some((f) => f.toLowerCase().endsWith('.iso'))
           hasSetupExe = filesInside.some((f) => {
             const low = f.toLowerCase()
@@ -127,11 +146,13 @@ function scanLocalDirectory(targetPath) {
           } catch (_) {}
         }
 
+        const resolvedPartsSize = parentPartsSize > 0 ? parentPartsSize : insidePartsSize
         const partsCount = parentParts.length > 0 ? parentParts.length : insideParts.length
         const hasArchive = partsCount > 0
         const key = item.toLowerCase()
-        const totalCalculatedSize = folderSize + parentPartsSize
-        const finalSize = totalCalculatedSize > 0 ? totalCalculatedSize : stats.size
+        const primarySize = folderSize > 0 ? folderSize : resolvedPartsSize
+        const finalSize = primarySize > 0 ? primarySize : stats.size
+        const totalDiskSize = folderSize + resolvedPartsSize
 
         gameMap.set(key, {
           name: item,
@@ -146,8 +167,11 @@ function scanLocalDirectory(targetPath) {
           hasExtractedSubfolder,
           isInstallerPackage: hasIso || hasSetupExe,
           size: finalSize,
+          folderSize,
+          parentPartsSize: resolvedPartsSize,
+          totalDiskSize: totalDiskSize > 0 ? totalDiskSize : finalSize,
           formattedSize: formatBytes(finalSize),
-          archiveSizeAdded: parentPartsSize > 0,
+          archiveSizeAdded: resolvedPartsSize > 0,
           mtime: stats.mtime
         })
       }
@@ -204,10 +228,13 @@ function scanLocalDirectory(targetPath) {
             matchedExisting.hasArchive = true
             matchedExisting.archiveParts = partsCount
             matchedExisting.archivePath = fullPath
-            // Jika di PASS 1 belum memasukkan ukuran part parent, tambahkan ukuran sibling parts
             if (!matchedExisting.archiveSizeAdded && totalSiblingPartsSize > 0) {
-              matchedExisting.size = (matchedExisting.size || 0) + totalSiblingPartsSize
-              matchedExisting.formattedSize = formatBytes(matchedExisting.size)
+              matchedExisting.parentPartsSize = totalSiblingPartsSize
+              matchedExisting.totalDiskSize = (matchedExisting.folderSize || 0) + totalSiblingPartsSize
+              if (!matchedExisting.folderSize) {
+                matchedExisting.size = totalSiblingPartsSize
+                matchedExisting.formattedSize = formatBytes(totalSiblingPartsSize)
+              }
               matchedExisting.archiveSizeAdded = true
             }
           } else {
@@ -221,6 +248,9 @@ function scanLocalDirectory(targetPath) {
               hasArchive: true,
               archiveParts: partsCount,
               size: totalSiblingPartsSize,
+              folderSize: 0,
+              parentPartsSize: totalSiblingPartsSize,
+              totalDiskSize: totalSiblingPartsSize,
               formattedSize: formatBytes(totalSiblingPartsSize),
               mtime: stats.mtime
             })

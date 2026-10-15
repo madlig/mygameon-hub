@@ -363,23 +363,46 @@ export default function DownloadHubPage() {
   }
 
   // ── 3. Handlers Ekstraksi UnRAR ──
-  async function handleManualExtract(folderPath, packageName, password) {
-    if (!password) {
-      const defaultPwd = packageName?.toLowerCase().includes('ova') ? 'www.ovagames.com' : 'mygameon'
-      setExtractModal({ folderPath, packageName, password: defaultPwd })
-      return
-    }
+  function handleOpenExtractModal(folderPath, packageName, currentPassword) {
+    const defaultPwd = currentPassword && !/^filecrypt\.cc$/i.test(currentPassword)
+      ? currentPassword
+      : 'www.ovagames.com'
+    setExtractModal({ folderPath, packageName, password: defaultPwd })
+  }
 
+  async function handleDismissExtraction(taskId) {
+    if (!taskId) return
+    try {
+      await fetch('/api/download/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss_extraction', taskId })
+      })
+      fetchStatus(true)
+    } catch (_) {}
+  }
+
+  async function handleManualExtract(folderPath, packageName, password, mode = 'background') {
     dispatchAction({ type: 'SET_EXTRACTING', key: folderPath, value: true })
     try {
       const res = await fetch('/api/download/control', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'extract_archive', folderPath, packageName, password })
+        body: JSON.stringify({
+          action: mode === 'gui' ? 'extract_winrar_gui' : 'extract_archive',
+          folderPath,
+          packageName,
+          password: password ? String(password).trim() : undefined,
+          mode
+        })
       })
       const json = await res.json()
       if (json.success) {
-        toast({ title: 'Ekstraksi Dimulai', description: `Mengekstrak ${packageName} di latar belakang.`, variant: 'success' })
+        toast({
+          title: mode === 'gui' ? 'Jendela WinRAR Dibuka' : 'Ekstraksi Dimulai',
+          description: json.message || `Mengekstrak ${packageName}.`,
+          variant: 'success'
+        })
         fetchStatus(true)
       } else {
         toast({ title: 'Gagal Memulai Ekstraksi', description: json.error, variant: 'error' })
@@ -717,7 +740,8 @@ export default function DownloadHubPage() {
                 const matchingExtraction = (data.activeExtractions || []).find(
                   (e) =>
                     e.folderPath === item.fullPath ||
-                    (e.packageName && item.cleanTitle && e.packageName.toLowerCase() === item.cleanTitle.toLowerCase())
+                    (e.packageName && item.cleanTitle && e.packageName.toLowerCase() === item.cleanTitle.toLowerCase()) ||
+                    (e.packageName && item.folderName && e.packageName.toLowerCase() === item.folderName.toLowerCase())
                 )
 
                 return (
@@ -728,6 +752,8 @@ export default function DownloadHubPage() {
                     onInspect={(name, fPath, type) => setInspectFolder({ folderName: name, folderPath: fPath, type })}
                     onOpenExplorer={handleOpenFolder}
                     onExtract={handleManualExtract}
+                    onOpenExtractModal={handleOpenExtractModal}
+                    onDismissExtraction={handleDismissExtraction}
                     onCleanRar={(it) => setConfirmCleanRar(it)}
                     onLaunchInstaller={(folder) => setWizardFolder(folder)}
                     onHandoff={handleHandoff}
@@ -904,14 +930,17 @@ export default function DownloadHubPage() {
         </div>
       )}
 
-      {/* 6. Modal Ekstrak UnRAR Manual (dengan Password Input) */}
+      {/* 6. Modal Ekstrak Arsip Manual (dengan Password Input & Quick Chips) */}
       {extractModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-white/10">
               <div>
-                <h3 className="text-sm font-black uppercase text-white">Ekstrak Arsip UnRAR</h3>
-                <p className="text-[11px] text-[var(--text-4)]">{extractModal.packageName}</p>
+                <h3 className="text-sm font-black uppercase text-white flex items-center gap-1.5">
+                  <Package size={15} className="text-blue-400" />
+                  <span>Ekstrak Arsip Game</span>
+                </h3>
+                <p className="text-[11px] text-[var(--text-4)] truncate max-w-xs">{extractModal.packageName}</p>
               </div>
               <button
                 type="button"
@@ -923,33 +952,51 @@ export default function DownloadHubPage() {
             </div>
 
             <div className="space-y-3 text-xs">
-              <label className="text-[11px] text-zinc-300 font-bold block">Password Arsip WinRAR:</label>
+              <label className="text-[11px] text-zinc-300 font-bold block">Password Arsip:</label>
               <input
                 type="text"
                 value={extractModal.password}
                 onChange={(e) => setExtractModal({ ...extractModal, password: e.target.value })}
-                placeholder="mygameon / www.ovagames.com"
-                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-400"
+                placeholder="cs.rin.ru / steamrip.com / www.ovagames.com"
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-400 text-xs"
               />
-              <p className="text-[10px] text-zinc-500">
-                Password default biasanya &quot;mygameon&quot; atau &quot;www.ovagames.com&quot; tergantung sumber unduhan.
-              </p>
+
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-zinc-400 font-medium block">Pilihan password populer (klik untuk isi):</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {['cs.rin.ru', 'steamrip.com', 'www.ovagames.com', 'mygameon', 'online-fix.me'].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setExtractModal({ ...extractModal, password: p })}
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                        extractModal.password === p
+                          ? 'border-blue-400 bg-blue-500/20 text-blue-300 font-bold'
+                          : 'border-white/10 bg-white/5 text-zinc-400 hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-white/10">
+            <div className="flex justify-end gap-2 pt-3 border-t border-white/10 flex-wrap">
               <button
                 type="button"
                 onClick={() => setExtractModal(null)}
-                className="px-4 py-2 rounded-xl border border-white/10 text-zinc-400 hover:text-white cursor-pointer"
+                className="px-4 py-2 rounded-xl border border-white/10 text-zinc-400 hover:text-white cursor-pointer text-xs"
               >
                 Batal
               </button>
               <button
                 type="button"
-                onClick={() => handleManualExtract(extractModal.folderPath, extractModal.packageName, extractModal.password)}
-                className="px-4 py-2 rounded-xl bg-blue-500 text-white font-bold hover:brightness-110 cursor-pointer shadow-md"
+                onClick={() => handleManualExtract(extractModal.folderPath, extractModal.packageName, extractModal.password, 'background')}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-black hover:brightness-110 cursor-pointer shadow-md text-xs flex items-center gap-1.5"
               >
-                Mulai Ekstrak
+                <Package size={13} />
+                <span>Mulai Ekstrak di MyGameON Hub</span>
               </button>
             </div>
           </div>

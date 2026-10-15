@@ -262,7 +262,7 @@ export async function POST(request) {
       })
     }
 
-    if (action === 'extract_now' || action === 'extract_archive') {
+    if (action === 'extract_now' || action === 'extract_archive' || action === 'extract_winrar_gui') {
       let p = targetPath || body.folderPath
       if (!p && body.folderName) {
         const { getDownloadConfig } = await import('@/lib/downloadWatcher')
@@ -271,8 +271,24 @@ export async function POST(request) {
         p = path.join(downloadDir, body.folderName)
       }
       if (!p || !fs.existsSync(p)) {
-        return NextResponse.json({ error: 'Folder arsip game tidak ditemukan' }, { status: 404 })
+        return NextResponse.json({ error: 'Folder atau berkas arsip game tidak ditemukan' }, { status: 404 })
       }
+
+      // Jika mode GUI atau action extract_winrar_gui, buka jendela interaktif WinRAR langsung di layar desktop
+      if (body.mode === 'gui' || action === 'extract_winrar_gui') {
+        const { launchWinRarGui } = await import('@/lib/extractor')
+        const resGui = launchWinRarGui({
+          targetPath: p,
+          password: body.password !== undefined ? String(body.password).trim() : ''
+        })
+        return NextResponse.json({
+          success: true,
+          mode: 'gui',
+          message: `Jendela WinRAR berhasil dibuka di layar desktop untuk "${path.basename(p)}".`,
+          destDir: resGui.destDir
+        })
+      }
+
       const { extractMultiPartArchive } = await import('@/lib/extractor')
       // Jalankan ekstraksi di background tanpa blocking
       extractMultiPartArchive({

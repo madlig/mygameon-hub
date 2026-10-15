@@ -24,14 +24,30 @@ async function detectPythonBinary() {
   return null
 }
 
-async function downloadFile(url, destPath) {
-  const res = await fetch(url, {
+async function downloadFile(source, destPath) {
+  if (!source) throw new Error('Sumber gambar tidak boleh kosong')
+
+  // 1. Jika sumber berupa data URL (base64 dari paste clipboard / file upload)
+  if (source.startsWith('data:image/')) {
+    const base64Data = source.replace(/^data:image\/\w+;base64,/, '')
+    await fs.promises.writeFile(destPath, Buffer.from(base64Data, 'base64'))
+    return
+  }
+
+  // 2. Jika sumber berupa file lokal di harddisk
+  if (fs.existsSync(source)) {
+    await fs.promises.copyFile(source, destPath)
+    return
+  }
+
+  // 3. Jika sumber berupa URL web (HTTP/HTTPS)
+  const res = await fetch(source, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     }
   })
   if (!res.ok) {
-    throw new Error(`Gagal mendownload gambar dari ${url} (HTTP ${res.status})`)
+    throw new Error(`Gagal mendownload gambar dari ${source} (HTTP ${res.status})`)
   }
   const arrayBuffer = await res.arrayBuffer()
   await fs.promises.writeFile(destPath, Buffer.from(arrayBuffer))

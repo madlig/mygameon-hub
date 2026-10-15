@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveSteamVerticalCover } from '@/lib/steamEnrichment'
 
 export async function GET(request) {
   try {
@@ -30,14 +31,25 @@ export async function GET(request) {
       // Find the first game (not DLC/Bundle if possible, though Steam search usually puts base games first)
       const appId = data.items[0].id
       
-      // Construct the 600x900 vertical capsule URL using the new Steam CDN domain
-      const coverUrl = `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900.jpg`
+      // Resolve vertical cover across multi-CDN (null jika game baru belum punya poster vertikal resmi)
+      const coverUrl = await resolveSteamVerticalCover(appId)
       
-      return NextResponse.json({ 
-        success: true, 
-        coverUrl,
-        matchedName: data.items[0].name 
-      })
+      if (coverUrl) {
+        return NextResponse.json({ 
+          success: true, 
+          coverUrl,
+          coverFound: true,
+          matchedName: data.items[0].name 
+        })
+      } else {
+        return NextResponse.json({ 
+          success: false, 
+          coverUrl: null,
+          coverFound: false,
+          matchedName: data.items[0].name,
+          error: 'Cover 600x900 tidak ditemukan di server Steam' 
+        }, { status: 404 })
+      }
     } else {
       return NextResponse.json({ 
         success: false, 

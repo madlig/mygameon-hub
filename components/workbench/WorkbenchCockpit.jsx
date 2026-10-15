@@ -98,6 +98,12 @@ export default function WorkbenchCockpit({
   const [showExplorer, setShowExplorer] = useState(false)
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false)
 
+  // Filter hanya berkas yang BENAR-BENAR berstatus part arsip WinRAR/7z (bukan berkas bonus soundtrack .zip atau aset internal game)
+  const genuinePartFiles = useMemo(() => {
+    const files = inspectData?.files || []
+    return files.filter((f) => f.category === 'rar_part' || f.isPart)
+  }, [inspectData?.files])
+
   // Evaluasi Skenario Cerdas
   const scenario = useMemo(() => {
     if (!activeFolder) return null
@@ -108,13 +114,15 @@ export default function WorkbenchCockpit({
     const missingParts = rarStats?.missingParts || []
     const hasMissingParts = missingParts.length > 0
 
-    // Filter hanya berkas yang BENAR-BENAR berstatus part arsip WinRAR/7z (bukan berkas bonus soundtrack .zip atau aset internal game)
-    const genuinePartFiles = files.filter((f) => f.category === 'rar_part' || f.isPart)
     const partsCountFromFiles = genuinePartFiles.length
     const partsSizeFromFiles = genuinePartFiles.reduce((acc, f) => acc + (f.size || 0), 0)
+    const nonPartFilesSize = files
+      .filter((f) => !(f.category === 'rar_part' || f.isPart))
+      .reduce((acc, f) => acc + (f.size || 0), 0)
 
     const resolvedPartsCount = rarStats?.partsCount ?? (partsCountFromFiles || activeFolder.archiveParts || 0)
     const resolvedRarSize = rarStats?.totalRarSize ?? (partsSizeFromFiles || activeFolder.parentPartsSize || 0)
+    const pureFolderSize = activeFolder.folderSize || nonPartFilesSize || activeFolder.size || 0
 
     const hasArchive = resolvedPartsCount > 0 && resolvedRarSize > 0
     const archivePartsCount = resolvedPartsCount
@@ -143,8 +151,7 @@ export default function WorkbenchCockpit({
 
     // 2. Skenario D: Redundansi Campuran (Folder Game Terpasang + Paket Part RAR)
     if (hasArchive && archivePartsCount > 0 && (hasExe || hasExtractedFolder)) {
-      const folderSize = activeFolder.folderSize || activeFolder.size || 0
-      const totalCombined = folderSize + resolvedRarSize
+      const totalCombined = pureFolderSize + resolvedRarSize
 
       return {
         key: 'MIXED_REDUNDANT',
@@ -152,7 +159,7 @@ export default function WorkbenchCockpit({
         badge: 'Redundansi Ganda',
         title: 'Folder Game Terpasang + Paket Part RAR Terdeteksi',
         chips: [
-          `📁 Game: ${formatBytes(folderSize)}`,
+          `📁 Game: ${formatBytes(pureFolderSize)}`,
           `📦 ${archivePartsCount} Part: ${formatBytes(resolvedRarSize)}`,
           `💾 Total Disk: ~${formatBytes(totalCombined)}`,
         ],
@@ -184,28 +191,36 @@ export default function WorkbenchCockpit({
       }
     }
 
-    // 4. Skenario A: Default Ground State (Game Pre-Installed / Siap Main)
-    // Semua folder game yang masuk ke Workbench (Dapur Bersih) berstatus Pre-Installed
-    const folderSize = activeFolder.folderSize || activeFolder.size || 0
+    // 4. Skenario A: Default Ground State (Game Pre-Installed / Installer Siap Kompres)
     return {
       key: 'PRE_INSTALLED',
       theme: 'blue',
-      badge: 'Pre-Installed (Siap Main)',
-      title: 'Game Siap Main — Belum Dipecah Part RAR',
-      chips: [`📁 Ukuran: ${formatBytes(folderSize)}`, '🎮 Format: Plug & Play'],
-      desc: `Struktur folder game terpasang bersih dan siap main (${formatBytes(folderSize)}). Pembeli Google Drive membutuhkan arsip WinRAR split 4.1GB agar stabil didownload. Pilih kompresi lokal terlebih dahulu atau langsung kompres & upload ke Google Drive.`,
+      badge: hasIso ? 'ISO / Setup Installer' : 'Pre-Installed (Siap Main)',
+      title: hasIso
+        ? 'Paket Installer Siap Kompres — Belum Dipecah Part RAR'
+        : 'Game Siap Main — Belum Dipecah Part RAR',
+      chips: [
+        `📁 Ukuran: ${formatBytes(pureFolderSize)}`,
+        hasIso ? '💿 Format: Installer / ISO' : '🎮 Format: Plug & Play',
+      ],
+      desc: `Struktur folder game bersih (${formatBytes(pureFolderSize)}). Pembeli Google Drive membutuhkan arsip WinRAR split 4.1GB agar stabil didownload. Pilih kompresi lokal terlebih dahulu atau langsung kompres & upload ke Google Drive.`,
       icon: Zap,
       canArchive: true,
       archiveLabel: 'Kompres WinRAR 4GB (Lokal)',
       canUpload: true,
       uploadLabel: 'Kompres & Upload ke Drive',
     }
-  }, [activeFolder, inspectData])
+  }, [activeFolder, inspectData, genuinePartFiles])
 
-  // Estimasi Ukuran yang Dibutuhkan untuk Upload
+  // Estimasi Ukuran yang Dibutuhkan untuk Upload ke Google Drive (tidak double-count folder + RAR)
   const effectiveSizeNeeded = useMemo(() => {
-    return activeFolder?.size || 0
-  }, [activeFolder?.size])
+    if (!activeFolder) return 0
+    const rarStats = inspectData?.packageSummary?.rarStats
+    const partsSizeFromFiles = genuinePartFiles.reduce((acc, f) => acc + (f.size || 0), 0)
+    const resolvedRarSize = rarStats?.totalRarSize ?? (partsSizeFromFiles || activeFolder.parentPartsSize || 0)
+    if (resolvedRarSize > 0) return resolvedRarSize
+    return activeFolder.folderSize || activeFolder.size || 0
+  }, [activeFolder, inspectData, genuinePartFiles])
 
   // Validasi Kuota Google Drive
   const quotaCheck = useMemo(() => {
@@ -227,19 +242,25 @@ export default function WorkbenchCockpit({
       usageGB = !isNaN(rawPct) && rawPct > 0 && rawPct <= 100 ? parseFloat(((rawPct / 100) * limitGB).toFixed(1)) : 0
     }
     const freeBytes = Math.max(0, (limitGB - usageGB) * 1024 * 1024 * 1024)
-    const remainingAfter = freeBytes - effectiveSizeNeeded
+    const existingGameBytes = Number(
+      selectedGame?.totalBytes ||
+      selectedGame?.totalSize ||
+      (typeof selectedGame?.size === 'number' ? selectedGame.size : 0)
+    ) || 0
+    const effectiveFreeBytes = (uploadMode === 'update' && cleanReplace) ? (freeBytes + existingGameBytes) : freeBytes
+    const remainingAfter = effectiveFreeBytes - effectiveSizeNeeded
     const isSufficient = remainingAfter >= 0
 
     return {
       status: isSufficient ? 'safe' : 'danger',
-      freeBytes,
+      freeBytes: effectiveFreeBytes,
       remainingAfterBytes: remainingAfter,
       message: isSufficient
-        ? `Sisa ${formatBytes(remainingAfter)} setelah upload`
+        ? `Sisa ${formatBytes(remainingAfter)} setelah ${uploadMode === 'update' ? 'update' : 'upload'}`
         : `Kurang ${formatBytes(Math.abs(remainingAfter))}! Kuota tidak cukup`,
       isSharedDrive: false,
     }
-  }, [targetWorkspace, effectiveSizeNeeded])
+  }, [targetWorkspace, effectiveSizeNeeded, uploadMode, cleanReplace, selectedGame])
 
   if (!activeFolder) {
     return (
@@ -357,7 +378,25 @@ export default function WorkbenchCockpit({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setUploadMode?.('update')}
+                    onClick={() => {
+                      setUploadMode?.('update')
+                      if (!selectedGame && activeFolder && existingGames.length > 0) {
+                        const cleaned = cleanReleaseName(activeFolder.name)
+                        const rawLower = activeFolder.name.toLowerCase()
+                        const cleanLower = cleaned.toLowerCase()
+                        const match = existingGames.find(
+                          (g) => (g.name || g.title || '').toLowerCase() === rawLower || (g.name || g.title || '').toLowerCase() === cleanLower
+                        )
+                        if (match) {
+                          setSelectedGame?.(match)
+                          setCustomCatalogTitle?.(match.name || cleaned)
+                          if (match.fileVersion) setFileVersion?.(match.fileVersion)
+                          const primaryOwner = match.ownerEmail?.split(',')[0]?.trim() || match.workspaceEmail
+                          const matchedWs = workspaces.find((w) => w.email === primaryOwner)
+                          if (matchedWs) setTargetWorkspace?.(matchedWs)
+                        }
+                      }
+                    }}
                     className={`flex-1 rounded-lg py-1.5 text-xs font-bold transition-all cursor-pointer ${
                       uploadMode === 'update'
                         ? 'bg-amber-400 text-black shadow-sm'
@@ -385,15 +424,28 @@ export default function WorkbenchCockpit({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-[var(--text-4)]">
-                  Versi Rilis Game {uploadMode === 'update' ? '(Wajib/Update)' : '(Opsional)'}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-[var(--text-4)]">
+                    Versi Rilis Game {uploadMode === 'update' ? '(Update Baru)' : '(Opsional)'}
+                  </label>
+                  {uploadMode === 'update' && selectedGame?.fileVersion && (
+                    <span className="text-[10px] font-mono text-amber-300">
+                      Cloud: <strong className="text-white">{selectedGame.fileVersion}</strong>
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={fileVersion}
                   onChange={(e) => setFileVersion?.(e.target.value)}
-                  placeholder={uploadMode === 'update' ? 'Misal: v4.04 Next-Gen...' : 'Misal: v1.0.0...'}
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2 text-xs font-semibold text-[var(--text)] placeholder:text-[var(--text-4)] focus:border-[var(--primary)] focus:outline-none"
+                  placeholder={
+                    uploadMode === 'update'
+                      ? selectedGame?.fileVersion
+                        ? `Versi baru (sebelumnya ${selectedGame.fileVersion})...`
+                        : 'Misal: v1.1-1250 / Update Patch...'
+                      : 'Misal: v1.0.0...'
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-black/40 px-3.5 py-2 text-xs font-semibold text-[var(--text)] placeholder:text-[var(--text-4)] focus:border-amber-400 focus:outline-none"
                 />
               </div>
             </div>
@@ -406,6 +458,10 @@ export default function WorkbenchCockpit({
                   selectedGame={selectedGame}
                   onSelectGame={(game) => {
                     setSelectedGame?.(game)
+                    setCustomCatalogTitle?.(game.name || game.title)
+                    if (game.fileVersion) {
+                      setFileVersion?.(game.fileVersion)
+                    }
                     const primaryOwner = game.ownerEmail?.split(',')[0]?.trim() || game.workspaceEmail
                     const matchedWs = workspaces.find((w) => w.email === primaryOwner)
                     if (matchedWs) setTargetWorkspace?.(matchedWs)
@@ -561,11 +617,17 @@ export default function WorkbenchCockpit({
                 title={
                   quotaCheck?.status === 'danger'
                     ? `Kuota Google Drive tidak mencukupi (Kurang ${formatBytes(Math.abs(quotaCheck.remainingAfterBytes))})`
+                    : uploadMode === 'update'
+                    ? `Update rilis baru untuk ${selectedGame?.name || customCatalogTitle} ke Google Drive`
                     : 'Mulai transfer file ke Google Drive'
                 }
               >
-                <UploadCloud size={14} />
-                <span>{scenario.uploadLabel || 'Mulai Upload ke Drive'}</span>
+                {uploadMode === 'update' ? <RefreshCw size={14} /> : <UploadCloud size={14} />}
+                <span>
+                  {uploadMode === 'update'
+                    ? (scenario.key === 'PRE_INSTALLED' ? 'Kompres & Update ke Drive' : 'Update Versi ke Drive')
+                    : (scenario.uploadLabel || 'Mulai Upload ke Drive')}
+                </span>
               </button>
             )}
           </div>
@@ -583,7 +645,7 @@ export default function WorkbenchCockpit({
             onRefresh={onRefreshInspect}
             onDeleteSingleFile={onDeleteSingleFile}
             onDeleteFolder={onDeleteFolder}
-            onCleanParts={() => onCleanParts?.(activeFolder)}
+            onCleanParts={() => onCleanParts?.(activeFolder, genuinePartFiles.map((p) => p.name))}
             onSanitizeJunk={onSanitizeJunk}
           />
         </div>

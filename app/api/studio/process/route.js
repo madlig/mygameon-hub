@@ -44,6 +44,7 @@ export async function POST(request) {
       targetFilePath,
       targetEmail,
       config,
+      autoCleanupLocal,
       action = 'upload',
       mode,
       targetFolderId,
@@ -84,21 +85,59 @@ export async function POST(request) {
           ? 'Ekstraksi & Upload Otomatis'
           : 'Upload Game'
 
+      const initialPhase =
+        action === 'archive' ? 'archiving' : action === 'extract' ? 'extracting' : 'uploading'
+
       updateState(
-        { status: 'processing', progress: 0, text: `Memulai ${actionName}...`, logs: [] },
+        {
+          status: 'processing',
+          phase: initialPhase,
+          action,
+          progress: 0,
+          overallProgress: 0,
+          speedMBps: 0,
+          etaSeconds: null,
+          totalBytesProcessed: 0,
+          totalBytesUploaded: 0,
+          driveFolderId: targetFolderId || null,
+          errorDetail: null,
+          text: `Memulai ${actionName}...`,
+          logs: [],
+          updatedAt: Date.now(),
+        },
         `Memulai pekerjaan lokal: ${actionName} untuk ${folderPath}`
       )
+
+      const handleUnhandledFailure = (err) => {
+        console.error(`Local ${action} job failed:`, err)
+        const current = getJobState()
+        if (current?.status === 'processing') {
+          updateState(
+            {
+              status: 'error',
+              phase: 'error',
+              action,
+              progress: 0,
+              text: `Gagal: ${err.message || 'Kesalahan internal'}`,
+              errorDetail: {
+                category: 'INTERNAL_ERROR',
+                title: `Eksekusi ${actionName} Gagal`,
+                cause: err.message || 'Terjadi kesalahan tak terduga pada worker.',
+                solution: 'Periksa log terminal dan coba jalankan ulang proses.',
+              },
+              updatedAt: Date.now(),
+            },
+            `ERROR FATAL: ${err.message}`
+          )
+        }
+      }
 
       // Jalankan asinkron tanpa menahan response HTTP
       if (action === 'extract') {
         const pathToExtract = targetFilePath && fs.existsSync(targetFilePath) ? targetFilePath : folderPath
-        extractJob(pathToExtract).catch((err) => {
-          console.error('Local extractJob failed:', err)
-        })
+        extractJob(pathToExtract).catch(handleUnhandledFailure)
       } else if (action === 'archive') {
-        archiveJob(folderPath, config).catch((err) => {
-          console.error('Local archiveJob failed:', err)
-        })
+        archiveJob(folderPath, config).catch(handleUnhandledFailure)
       } else if (action === 'extract_and_upload') {
         (async () => {
           const { outputDir, cleanGameName } = await extractJob(folderPath)
@@ -106,21 +145,21 @@ export async function POST(request) {
             mode: mode || 'new',
             targetFolderId: targetFolderId || null,
             autoPropagate: !!autoPropagate,
+            autoCleanupLocal: Boolean(autoCleanupLocal || config?.autoCleanupLocal),
             gameName: customTitle || cleanGameName || gameName || null,
             customTitle: customTitle || cleanGameName || gameName || null,
             cleanReplace: cleanReplace !== false,
             forceArchive: true,
             fileVersion: fileVersion || '',
           })
-        })().catch((err) => {
-          console.error('Local extract_and_upload failed:', err)
-        })
+        })().catch(handleUnhandledFailure)
       } else {
         // Upload (auto-archive jika folder mentah)
         uploadJob(folderPath, targetEmail, config, {
           mode: mode || 'new',
           targetFolderId: targetFolderId || null,
           autoPropagate: !!autoPropagate,
+          autoCleanupLocal: Boolean(autoCleanupLocal || config?.autoCleanupLocal),
           gameName: customTitle || gameName || null,
           customTitle: customTitle || gameName || null,
           cleanReplace: cleanReplace !== false,
@@ -128,9 +167,7 @@ export async function POST(request) {
           forceWipeExisting: !!forceWipeExisting,
           selectedParts: Array.isArray(selectedParts) ? selectedParts : null,
           fileVersion: fileVersion || '',
-        }).catch((err) => {
-          console.error('Local uploadJob failed:', err)
-        })
+        }).catch(handleUnhandledFailure)
       }
 
       return NextResponse.json({

@@ -42,9 +42,9 @@ export default function ActiveUploadHero({
   const phase = processState?.phase || ''
   const action = processState?.action || ''
 
-  const isArchiving = phase === 'archiving' || action === 'archive'
+  const isArchiving = phase === 'archiving' || (action === 'archive' && phase !== 'uploading' && !processState?.driveFolderId)
   const isSuccess = status === 'success' || phase === 'done'
-  const isArchiveSuccess = isSuccess && (action === 'archive' || (!processState?.driveFolderId && !processState?.totalBytesUploaded && isArchiving))
+  const isArchiveSuccess = isSuccess && action === 'archive' && !processState?.driveFolderId
   const isError = status === 'error'
   const isPaused = status === 'paused'
   const isUploading = !isArchiving && status === 'processing' && !isPaused && !isSuccess
@@ -302,7 +302,7 @@ export default function ActiveUploadHero({
                 className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3.5 py-1.5 text-xs font-black text-black hover:brightness-110 transition-all cursor-pointer shadow-sm"
               >
                 <Play size={13} className="fill-current" />
-                <span>Coba Lanjutkan</span>
+                <span>{isArchiving ? 'Ulangi Kompresi' : 'Coba Lanjutkan'}</span>
               </button>
 
               {onResetProcessState && (

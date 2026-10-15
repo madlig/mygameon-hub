@@ -29,7 +29,7 @@ export default function StagingFolderList({
 
   // Hitung total data di harddisk staging
   const totalDiskSize = useMemo(() => {
-    return folders.reduce((sum, f) => sum + (f.size || 0), 0)
+    return folders.reduce((sum, f) => sum + (f.totalDiskSize || f.size || 0), 0)
   }, [folders])
 
   const getFolderBadge = (folder) => {

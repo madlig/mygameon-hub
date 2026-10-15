@@ -3,8 +3,7 @@
 import Link from 'next/link'
 import {
   CheckCircle2, Loader2, Play, Package, Trash2, ArrowRight,
-  FolderOpen, Zap, AlertTriangle, Disc, HardDrive, Check,
-  ExternalLink, Sparkles
+  FolderOpen, Zap, AlertTriangle, Disc, Check, KeyRound, X
 } from 'lucide-react'
 
 export default function GamePipelineCard({
@@ -13,6 +12,8 @@ export default function GamePipelineCard({
   onInspect,
   onOpenExplorer,
   onExtract,
+  onOpenExtractModal,
+  onDismissExtraction,
   onCleanRar,
   onLaunchInstaller,
   onHandoff,
@@ -30,9 +31,12 @@ export default function GamePipelineCard({
   let step2Extract = { status: 'completed', label: '2. Ekstrak' }
   const needsExtract = (item.hasRar || item.hasPartFiles || (item.completedPartsCount || 0) > 0) && !item.isExtracted && !item.isInstalledInStudio
   const isCurrentlyExtracting = isExtracting || (activeExtraction && activeExtraction.status === 'extracting')
+  const hasExtractionError = Boolean(activeExtraction && activeExtraction.status === 'error')
 
   if (isCurrentlyExtracting) {
     step2Extract = { status: 'running', label: `2. Mengekstrak (${activeExtraction?.progressPercent || 0}%)` }
+  } else if (hasExtractionError) {
+    step2Extract = { status: 'error', label: '2. Gagal Ekstrak' }
   } else if (needsExtract) {
     step2Extract = { status: 'pending', label: '2. Butuh Ekstrak' }
   }
@@ -73,6 +77,8 @@ export default function GamePipelineCard({
           ? 'border-amber-500/50 bg-gradient-to-r from-amber-950/25 via-black/50 to-black/40 shadow-amber-500/10'
           : isCurrentlyExtracting
           ? 'border-blue-500/40 bg-gradient-to-r from-blue-950/25 via-black/50 to-black/40'
+          : hasExtractionError
+          ? 'border-rose-500/40 bg-gradient-to-r from-rose-950/25 via-black/50 to-black/40'
           : 'border-white/10 bg-black/40 hover:border-white/20'
       }`}
     >
@@ -116,6 +122,11 @@ export default function GamePipelineCard({
               <span className="rounded-lg bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-300 flex items-center gap-1 animate-pulse">
                 <Loader2 size={11} className="animate-spin text-amber-400" />
                 <span>MENGINSTAL SILENT</span>
+              </span>
+            ) : isCurrentlyExtracting ? (
+              <span className="rounded-lg bg-blue-500/20 border border-blue-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-300 flex items-center gap-1 animate-pulse">
+                <Loader2 size={11} className="animate-spin text-blue-400" />
+                <span>MENGEKSTRAK ({activeExtraction?.progressPercent || 0}%)</span>
               </span>
             ) : null}
           </div>
@@ -162,6 +173,7 @@ export default function GamePipelineCard({
           {pipelineSteps.map((s, idx) => {
             const isCompleted = s.status === 'completed'
             const isRunning = s.status === 'running'
+            const isError = s.status === 'error'
 
             return (
               <div
@@ -171,6 +183,8 @@ export default function GamePipelineCard({
                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-bold'
                     : isRunning
                     ? 'border-amber-500/40 bg-amber-500/10 text-amber-300 font-bold animate-pulse'
+                    : isError
+                    ? 'border-rose-500/40 bg-rose-500/10 text-rose-300 font-bold'
                     : 'border-white/5 bg-white/5 text-zinc-500'
                 }`}
               >
@@ -178,6 +192,8 @@ export default function GamePipelineCard({
                   <Check size={13} className="text-emerald-400 shrink-0" />
                 ) : isRunning ? (
                   <Loader2 size={13} className="animate-spin text-amber-400 shrink-0" />
+                ) : isError ? (
+                  <AlertTriangle size={13} className="text-rose-400 shrink-0" />
                 ) : (
                   <span className="h-2 w-2 rounded-full bg-zinc-600 shrink-0" />
                 )}
@@ -220,23 +236,70 @@ export default function GamePipelineCard({
         </div>
       )}
 
-      {isCurrentlyExtracting && activeExtraction && (
+      {isCurrentlyExtracting && (
         <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-3 space-y-2 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-blue-300 font-bold flex items-center gap-1.5">
-              <Loader2 size={13} className="animate-spin text-blue-400" />
-              <span>Mengekstrak UnRAR: {activeExtraction.currentFile || 'Mengekstrak volume...'}</span>
+          <div className="flex items-center justify-between text-xs font-mono gap-2">
+            <span className="text-blue-300 font-bold flex items-center gap-1.5 min-w-0 truncate">
+              <Loader2 size={13} className="animate-spin text-blue-400 shrink-0" />
+              <span className="truncate">
+                Mengekstrak Game: {activeExtraction?.currentFile || 'Memproses volume arsip...'}
+              </span>
             </span>
-            <span className="text-blue-400 font-black text-sm">
-              {activeExtraction.progressPercent || 0}%
+            <span className="text-blue-400 font-black text-sm shrink-0">
+              {activeExtraction?.progressPercent || 0}%
             </span>
           </div>
 
           <div className="w-full h-2.5 rounded-full bg-black/60 border border-white/10 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-400 to-cyan-400 transition-all duration-300"
-              style={{ width: `${Math.max(activeExtraction.progressPercent || 0, 2)}%` }}
+              className="h-full rounded-full bg-gradient-to-r from-blue-500 via-indigo-400 to-cyan-400 transition-all duration-300 shadow-[0_0_10px_rgba(59,130,246,0.4)]"
+              style={{ width: `${Math.max(activeExtraction?.progressPercent || 0, 2)}%` }}
             />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 flex-wrap gap-2">
+            <span>
+              {activeExtraction?.extractedBytesFormatted || '0 B'} / {activeExtraction?.totalBytesFormatted || item.totalSizeFormatted || '0 B'}
+              {activeExtraction?.speedFormatted ? ` • ${activeExtraction.speedFormatted}` : ''}
+            </span>
+            <span>
+              {activeExtraction?.etaFormatted ? `Sisa waktu: ${activeExtraction.etaFormatted}` : 'Mengekstrak berkas ke disk...'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {hasExtractionError && activeExtraction && (
+        <div className="rounded-xl border border-rose-500/40 bg-rose-950/25 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+          <div className="flex items-start gap-2 text-xs">
+            <AlertTriangle size={15} className="text-rose-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-rose-300">Gagal Mengekstrak Arsip Game</p>
+              <p className="text-[11px] text-rose-200/80 font-mono">{activeExtraction.error}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {onOpenExtractModal && (
+              <button
+                type="button"
+                onClick={() => onOpenExtractModal(item.fullPath, item.cleanTitle || item.folderName, item.password)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 hover:bg-rose-500/30 px-2.5 py-1.5 text-xs font-bold text-rose-200 transition-all cursor-pointer"
+              >
+                <KeyRound size={12} />
+                <span>Ubah Password & Coba Lagi</span>
+              </button>
+            )}
+            {onDismissExtraction && (
+              <button
+                type="button"
+                onClick={() => onDismissExtraction(activeExtraction.id)}
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 p-1.5 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                title="Tutup pesan error"
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -253,6 +316,10 @@ export default function GamePipelineCard({
           ) : isInstalling ? (
             <span className="text-amber-300">
               Instalasi silent sedang berjalan di latar belakang (aman di-minimize).
+            </span>
+          ) : isCurrentlyExtracting ? (
+            <span className="text-blue-300">
+              Proses ekstraksi UnRAR sedang berjalan di latar belakang...
             </span>
           ) : needsExtract ? (
             <span className="text-blue-300">
@@ -289,7 +356,7 @@ export default function GamePipelineCard({
             </button>
           )}
 
-          {/* KASUS 1: Game Sudah Terpasang di Workbench (Gears of War) */}
+          {/* KASUS 1: Game Sudah Terpasang di Workbench */}
           {isInstalled ? (
             <>
               {/* Tombol Hapus Mentahan Download untuk menghemat ruang disk */}
@@ -335,17 +402,55 @@ export default function GamePipelineCard({
               <Zap size={13} />
               <span>🔍 Monitor Instalasi</span>
             </button>
+          ) : isCurrentlyExtracting ? (
+            /* KASUS 2B: Sedang Mengekstrak UnRAR */
+            <div className="flex items-center gap-2">
+              {activeExtraction?.id && onDismissExtraction && (
+                <button
+                  type="button"
+                  onClick={() => onDismissExtraction(activeExtraction.id)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 text-xs font-bold text-rose-300 transition-all cursor-pointer"
+                  title="Batalkan proses ekstraksi UnRAR"
+                >
+                  <X size={12} />
+                  <span>Batalkan</span>
+                </button>
+              )}
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center gap-1.5 rounded-xl bg-blue-500/30 border border-blue-500/40 px-4 py-2 text-xs font-black text-blue-200 cursor-not-allowed"
+              >
+                <Loader2 size={13} className="animate-spin text-blue-300" />
+                <span>Mengekstrak ({activeExtraction?.progressPercent || 0}%)...</span>
+              </button>
+            </div>
           ) : needsExtract ? (
-            /* KASUS 3: Butuh Ekstrak UnRAR */
-            <button
-              type="button"
-              onClick={() => onExtract(item.fullPath, item.cleanTitle, item.password)}
-              disabled={isExtracting}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2 text-xs font-black text-white hover:brightness-110 shadow-md shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
-            >
-              {isExtracting ? <Loader2 size={13} className="animate-spin" /> : <Package size={13} />}
-              <span>⚡ Ekstrak UnRAR</span>
-            </button>
+            /* KASUS 3: Butuh Ekstrak Arsip */
+            <div className="flex items-center gap-2 flex-wrap">
+              {onOpenExtractModal && (
+                <button
+                  type="button"
+                  onClick={() => onOpenExtractModal(item.fullPath, item.cleanTitle || item.folderName, item.password)}
+                  disabled={isExtracting}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs font-bold text-zinc-300 hover:text-white transition-all cursor-pointer disabled:opacity-50"
+                  title="Atur password arsip secara manual atau pilih opsi ekstraksi"
+                >
+                  <KeyRound size={12} className="text-amber-400" />
+                  <span>Password</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onExtract(item.fullPath, item.cleanTitle || item.folderName, item.password, 'background')}
+                disabled={isExtracting}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2 text-xs font-black text-white hover:brightness-110 shadow-md shadow-blue-500/20 transition-all cursor-pointer disabled:opacity-50"
+                title="Mulai proses ekstraksi arsip langsung di dalam aplikasi (dengan live progress bar)"
+              >
+                {isExtracting ? <Loader2 size={13} className="animate-spin" /> : <Package size={13} />}
+                <span>📦 Ekstrak Game</span>
+              </button>
+            </div>
           ) : item.packageType === 'ISO' || item.hasIso || item.packageType === 'REPACK' ? (
             /* KASUS 4: File ISO atau Setup Installer (GOG/Repack) Siap Pasang ke Pre-Installed */
             <>

@@ -18,6 +18,11 @@ const DEFAULT_CONFIG = {
     'datanodes.to',
     'uploadhaven.com',
     'rapidgator.net'
+  ],
+  // Domain dengan token sekali pakai (burned on browser start) yang wajib dilewati agar browser mengunduh langsung
+  excludeDomains: [
+    'megadb.net',
+    'megadb.xyz'
   ]
 }
 
@@ -57,6 +62,18 @@ browser.downloads.onCreated.addListener(async (downloadItem) => {
   const filename = downloadItem.filename || ''
   const lowerUrl = rawUrl.toLowerCase()
   const lowerFilename = filename.toLowerCase()
+
+  // 0. Cek apakah domain masuk dalam daftar yang dikecualikan (misal MegaDB yang memakai token 1x pakai)
+  let isExcludedDomain = false
+  try {
+    const host = new URL(rawUrl).hostname.toLowerCase()
+    const refHost = downloadItem.referrer ? new URL(downloadItem.referrer).hostname.toLowerCase() : ''
+    isExcludedDomain = (config.excludeDomains || ['megadb.net', 'megadb.xyz']).some((d) => host.includes(d) || refHost.includes(d))
+  } catch (_) {}
+
+  if (isExcludedDomain) {
+    return
+  }
 
   // 1. Cek apakah file termasuk ekstensi target game
   const isTargetExt = config.interceptExtensions.some((ext) => {

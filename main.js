@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, nativeImage, Menu, MenuItem } = require('electron');
 app.setName('MyGameON Studio');
 app.setAppUserModelId('com.mygameon.studio');
 const { autoUpdater } = require('electron-updater');
@@ -351,6 +351,14 @@ ipcMain.handle('open-game-browser', (_event, { url }) => {
   return openIsolatedFirefox(url);
 });
 
+ipcMain.handle('open-external-browser', (_event, { url }) => {
+  if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+    shell.openExternal(url);
+    return { success: true };
+  }
+  return { success: false, error: 'URL tidak valid' };
+});
+
 function createWindow() {
   const iconPath = path.join(__dirname, 'build', 'icon.ico');
   const fallbackIcon = path.join(__dirname, 'public', 'icons', 'icon-512.png');
@@ -374,6 +382,34 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     },
+  });
+
+  // 🌐 Buka seluruh link eksternal (target="_blank" / window.open) di browser default OS (Chrome, Edge, dll)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http:') || url.startsWith('https:')) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  // 📋 Context Menu bawaan untuk input form (Cut, Copy, Paste, Select All)
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menu = new Menu();
+    if (params.isEditable) {
+      menu.append(new MenuItem({ role: 'undo', label: 'Undo' }));
+      menu.append(new MenuItem({ role: 'redo', label: 'Redo' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ role: 'cut', label: 'Cut' }));
+      menu.append(new MenuItem({ role: 'copy', label: 'Copy' }));
+      menu.append(new MenuItem({ role: 'paste', label: 'Paste' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ role: 'selectAll', label: 'Select All' }));
+      menu.popup();
+    } else if (params.selectionText && params.selectionText.trim().length > 0) {
+      menu.append(new MenuItem({ role: 'copy', label: 'Copy' }));
+      menu.popup();
+    }
   });
 
   // 🛡️ Cegah Blank Putih jika load awal sempat gagal

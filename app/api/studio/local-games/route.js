@@ -155,7 +155,7 @@ export async function POST(request) {
     }
 
     const body = await request.json()
-    const { action } = body
+    const action = body.action || (body.folderName ? 'create_folder' : body.newStagingPath ? 'set_staging_path' : undefined)
 
     // 1. Action: Buat Folder Baru di Staging
     if (action === 'create_folder') {
@@ -183,7 +183,7 @@ export async function POST(request) {
 
     // 2. Action: Ganti Direktori Staging Aktif
     if (action === 'set_staging_path') {
-      const { newStagingPath } = body
+      const newStagingPath = body.newStagingPath || body.stagingPath
       if (!newStagingPath || typeof newStagingPath !== 'string') {
         return NextResponse.json({ error: 'Path direktori staging wajib diisi.' }, { status: 400 })
       }
@@ -268,7 +268,7 @@ export async function POST(request) {
   }
 }
 
-// ── PATCH: Ubah Nama Folder Game & Seluruh File Part Bersaudara ──
+// ── PATCH / PUT: Ubah Nama Folder Game & Seluruh File Part Bersaudara ──
 export async function PATCH(request) {
   try {
     const session = await auth()
@@ -277,10 +277,24 @@ export async function PATCH(request) {
     }
 
     const body = await request.json()
-    const { stagingPath: customStaging, oldName, newName, isArchiveFile } = body
+    const { stagingPath: customStaging, oldName, oldPath, newName } = body
+
+    // Fallback jika pemanggil mengirim PATCH { stagingPath } untuk mengubah staging path
+    if (!oldName && !oldPath && !newName && customStaging) {
+      const trimmedPath = String(customStaging).trim()
+      if (!fs.existsSync(trimmedPath) || !fs.statSync(trimmedPath).isDirectory()) {
+        return NextResponse.json({ error: `Direktori tidak ditemukan di PC: ${trimmedPath}` }, { status: 400 })
+      }
+      saveStagingConfig({ stagingPath: trimmedPath })
+      return NextResponse.json({
+        success: true,
+        message: 'Direktori staging berhasil diperbarui.',
+        stagingPath: trimmedPath
+      })
+    }
 
     const stagingPath = resolveUploadDirectory(customStaging)
-    const cleanOld = oldName?.trim()
+    const cleanOld = (oldName || (oldPath ? path.basename(oldPath) : ''))?.trim()
     const cleanNew = sanitizeName(newName)
 
     if (!cleanOld || !cleanNew) {
@@ -339,6 +353,8 @@ export async function PATCH(request) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
   }
 }
+
+export { PATCH as PUT }
 
 // ── DELETE: Hapus Part Saja (Hemat Disk) ATAU Hapus Folder/Game Lengkap ──
 export async function DELETE(request) {

@@ -1,10 +1,27 @@
-# ⚡ MyGameON Download Catcher (Firefox Extension)
+# ⚡ MyGameON Download Catcher (Browser Extension)
 
-Ekstensi eksklusif untuk menangkap unduhan berkas game dari Firefox (seperti SteamRIP, BZZHR, 1Fichier, GoFile) dan langsung meneruskannya ke **JDownloader 2** di PC Anda dengan Cookie & Referrer lengkap (anti-error 403), serta dipantau secara realtime di **MyGameON Hub** (`/download`).
+Ekstensi eksklusif untuk menangkap unduhan berkas game dari browser (seperti SteamRIP, BZZHR, 1Fichier, GoFile) dan langsung meneruskannya ke **MyGameON Hub** / **JDownloader 2** di PC Anda dengan Cookie & Referrer lengkap (anti-error 403 / anti-expired link), serta dipantau secara realtime di **MyGameON Hub** (`/download`).
 
 ---
 
-## 🚀 Panduan Pasang di Firefox (Hanya 1 Menit)
+## 🌐 Pilihan 1: Panduan Pasang di Chrome / Edge / Brave (Permanen)
+
+1. Buka browser **Google Chrome**, **Microsoft Edge**, atau **Brave**.
+2. Buka halaman ekstensi:
+   - Di Chrome: ketik `chrome://extensions` di address bar lalu Enter.
+   - Di Edge: ketik `edge://extensions` di address bar lalu Enter.
+   - Di Brave: ketik `brave://extensions` di address bar lalu Enter.
+3. Di pojok kanan atas, aktifkan toggle **"Developer mode"** (Mode pengembang).
+4. Klik tombol **"Load unpacked"** (Muat yang belum dibongkar) di pojok kiri atas.
+5. Pilih folder:
+   ```text
+   c:\mad\proyek\mygameon-hub\extension-chrome
+   ```
+6. **Selesai!** Ekstensi akan terpasang permanen (tidak akan hilang saat browser ditutup).
+
+---
+
+## 🦊 Pilihan 2: Panduan Pasang di Firefox
 
 1. Buka browser **Firefox**.
 2. Pada address bar Firefox, ketik:
@@ -17,7 +34,7 @@ Ekstensi eksklusif untuk menangkap unduhan berkas game dari Firefox (seperti Ste
    ```text
    c:\mad\proyek\mygameon-hub\extension\manifest.json
    ```
-5. **Selesai!** Ekstensi `MyGameON Download Catcher` akan langsung muncul dengan ikon petir di toolbar Firefox Anda.
+5. **Selesai!** Ekstensi `MyGameON Download Catcher` akan langsung aktif di Firefox.
 
 ---
 

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { 
   Search, Loader2, Sparkles, Copy, ExternalLink, Image as ImageIcon, 
-  FolderOpen, Check, RefreshCw, AlertCircle, CheckCircle2, Layers, HardDrive, ChevronDown
+  FolderOpen, Check, RefreshCw, AlertCircle, CheckCircle2, Layers, HardDrive, ChevronDown, Upload
 } from 'lucide-react'
 import TopBar from '@/components/layout/TopBar'
 import { useNavigationGuard } from '@/hooks/useNavigationGuard'
@@ -29,6 +29,7 @@ export default function ShopeeListingStudio() {
   const [coverUrl, setCoverUrl] = useState('')
   const [screenshots, setScreenshots] = useState([])
   const [customOutputDir, setCustomOutputDir] = useState('D:\\Shopee\\3-listing_output')
+  const fileInputRef = useRef(null)
 
   // Generation state
   const [generateState, setGenerateState] = useState({ status: 'idle', result: null, error: null })
@@ -127,6 +128,9 @@ export default function ShopeeListingStudio() {
         setDescription(json.data.description || '')
         setCoverUrl(json.data.coverUrl || '')
         setScreenshots(json.data.screenshots || [])
+        if (!json.data.coverUrl) {
+          toast('Cover vertikal tidak ditemukan di Steam. Silakan gunakan link poster dari Google.', 'warning')
+        }
       } else {
         setSearchState({ status: 'error', data: null, error: json.error || 'Game tidak ditemukan' })
       }
@@ -213,7 +217,14 @@ export default function ShopeeListingStudio() {
 
   // 2. Generate 6 Slides with Pillow Engine
   async function handleGenerate() {
-    if (!title || !coverUrl) return
+    if (!title) {
+      toast('Judul game wajib diisi', 'warning')
+      return
+    }
+    if (!coverUrl || !coverUrl.trim()) {
+      toast('URL Cover belum disetel! Harap masukkan link cover dari Google Images terlebih dahulu.', 'warning')
+      return
+    }
 
     setGenerateState({ status: 'generating', result: null, error: null })
 
@@ -268,6 +279,54 @@ export default function ShopeeListingStudio() {
     setTimeout(() => {
       setCopyFeedback(prev => ({ ...prev, [field]: false }))
     }, 2000)
+  }
+
+  // 🌐 Buka pencarian Google Images langsung di browser native default OS (Chrome, Edge, dll)
+  function handleOpenGoogleSearch(e) {
+    if (e) e.preventDefault()
+    const searchUrl = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent((title || query) + ' cover poster 600x900')}`
+    if (typeof window !== 'undefined' && window.electronAPI?.openExternalBrowser) {
+      window.electronAPI.openExternalBrowser(searchUrl)
+    } else {
+      window.open(searchUrl, '_blank')
+    }
+  }
+
+  // 📁 Handler unggah file gambar lokal dari komputer
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast('File harus berupa gambar (JPG, PNG, WEBP)', 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setCoverUrl(event.target.result)
+      toast('Cover berhasil dimuat dari file lokal!', 'success')
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // 📋 Handler paste gambar langsung dari clipboard (Ctrl+V)
+  function handlePasteCover(e) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile()
+        if (file) {
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            setCoverUrl(event.target.result)
+            toast('Cover berhasil ditempel langsung dari Clipboard!', 'success')
+          }
+          reader.readAsDataURL(file)
+          e.preventDefault()
+          return
+        }
+      }
+    }
   }
 
   function handleReset() {
@@ -432,28 +491,110 @@ export default function ShopeeListingStudio() {
                   </span>
                 </div>
 
-                <div className="aspect-[2/3] w-full max-w-[280px] mx-auto bg-black/40 rounded-xl overflow-hidden border border-white/10 shadow-inner relative group">
+                <div className="aspect-[2/3] w-full max-w-[280px] mx-auto bg-black/40 rounded-xl overflow-hidden border border-white/10 shadow-inner relative group" onPaste={handlePasteCover}>
                   {coverUrl ? (
-                    <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
+                    <img 
+                      src={coverUrl} 
+                      alt="Cover" 
+                      className="w-full h-full object-cover" 
+                      onError={() => {
+                        setCoverUrl('')
+                        toast('Link cover tidak dapat dimuat (404/rusak). Silakan cari link manual dari Google.', 'error')
+                      }}
+                    />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[var(--text-4)]">Tidak ada cover</div>
+                    <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center bg-amber-500/5 border border-dashed border-amber-500/30 rounded-xl">
+                      <AlertCircle size={28} className="text-amber-400 mb-2" />
+                      <span className="text-xs font-bold text-amber-300 mb-1">Cover Tidak Ditemukan</span>
+                      <p className="text-[11px] text-[var(--text-4)] leading-relaxed mb-3">
+                        Server Steam belum menyediakan poster vertikal 600x900 untuk game ini.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleOpenGoogleSearch}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] shadow transition-all cursor-pointer mb-2"
+                        title="Buka Google Images di browser Chrome / Edge bawaan komputer Anda"
+                      >
+                        <Search size={12} /> Cari di Google Images
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1 text-[10px] text-[var(--text-3)] hover:text-white transition-colors cursor-pointer"
+                      >
+                        <Upload size={11} /> Atau pilih file gambar lokal
+                      </button>
+                    </div>
                   )}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-4 text-center">
-                    <p className="text-xs text-white mb-2">Gunakan URL cover vertikal lainnya jika diinginkan</p>
-                  </div>
+                  {coverUrl && (
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-4 text-center">
+                      <p className="text-xs text-white mb-2">Gunakan URL cover vertikal lainnya jika diinginkan</p>
+                      <button
+                        type="button"
+                        onClick={handleOpenGoogleSearch}
+                        className="inline-flex items-center gap-1 text-[11px] text-amber-300 underline font-semibold cursor-pointer"
+                      >
+                        <ExternalLink size={11} /> Cari di Google Images
+                      </button>
+                    </div>
+                  )}
                 </div>
 
+                {/* Hidden File Input for Image Upload */}
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleFileSelect} 
+                  accept="image/png,image/jpeg,image/webp" 
+                  className="hidden" 
+                />
+
                 {/* Custom Cover Input */}
-                <div className="mt-4">
-                  <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block mb-1">
-                    Ganti URL Cover (Opsional)
-                  </label>
+                <div className="mt-4" onPaste={handlePasteCover}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wider block">
+                      {coverUrl ? 'Ganti URL Cover' : 'Input Link Cover Manual'}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[10px] text-[var(--text-3)] hover:text-white flex items-center gap-1 cursor-pointer font-semibold transition-colors"
+                        title="Upload file poster dari harddisk komputer"
+                      >
+                        <Upload size={10} /> Upload File
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenGoogleSearch}
+                        className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                        title="Buka Google Images di browser luar (Chrome / Edge)"
+                      >
+                        <ExternalLink size={10} /> Cari di Google
+                      </button>
+                    </div>
+                  </div>
                   <input
-                    type="url"
+                    type="text"
                     value={coverUrl}
+                    placeholder={coverUrl ? 'https://...' : 'Tempel link gambar dari Google Images / tekan Ctrl+V...'}
                     onChange={(e) => setCoverUrl(e.target.value)}
-                    className="w-full bg-[var(--background)] border border-[var(--border-soft)] rounded-lg py-2 px-3 text-xs text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                    className={`w-full bg-[var(--background)] border rounded-lg py-2 px-3 text-xs text-[var(--text)] outline-none transition-colors ${
+                      coverUrl 
+                        ? 'border-[var(--border-soft)] focus:border-[var(--primary)]' 
+                        : 'border-amber-500/50 bg-amber-500/5 focus:border-amber-400'
+                    }`}
                   />
+                  {!coverUrl && (
+                    <div className="text-[10px] text-amber-400/90 mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 leading-relaxed space-y-1">
+                      <p className="font-bold flex items-center gap-1">
+                        <span>💡 3 Cara Mengisi Cover:</span>
+                      </p>
+                      <p>1. Klik <b>&quot;Cari di Google Images&quot;</b> (akan terbuka di browser bawaan Windows seperti Chrome/Edge).</p>
+                      <p>2. Di Chrome/Edge, klik kanan gambar lalu pilih <b>&quot;Salin alamat gambar&quot;</b> (Copy image address) dan tempel di kolom ini. Anda juga bisa klik kanan <b>&quot;Salin gambar&quot;</b> lalu tekan <b>Ctrl+V</b> langsung di sini.</p>
+                      <p>3. Atau klik tombol <b>&quot;Upload File&quot;</b> jika Anda sudah menyimpan file gambar di komputer.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 

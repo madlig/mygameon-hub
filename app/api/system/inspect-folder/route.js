@@ -20,15 +20,15 @@ function parsePartInfo(filename) {
   const cleanName = isDownloading ? filename.replace(/\.(part|crdownload|tmp)$/i, '') : filename
 
   // 1. Pola standar: name.part01.rar, name.part1.rar, name.part001.rar
-  const partMatch = cleanName.match(/\.part(\d+)\.(rar|7z|zip)$/i) || cleanName.match(/part(\d+)/i)
+  const partMatch = cleanName.match(/\.part(\d+)\.(rar|7z|zip)$/i)
   if (partMatch) {
     return { isPart: true, partNumber: parseInt(partMatch[1], 10), isDownloading }
   }
 
-  // 2. Pola 7-Zip / HJSplit: name.zip.001, name.7z.001, name.001
-  const numExtMatch = cleanName.match(/\.(\d{3})$/i)
+  // 2. Pola 7-Zip / HJSplit: name.zip.001, name.7z.001, name.rar.001
+  const numExtMatch = cleanName.match(/\.(rar|7z|zip)\.(\d{3})$/i)
   if (numExtMatch) {
-    return { isPart: true, partNumber: parseInt(numExtMatch[1], 10), isDownloading }
+    return { isPart: true, partNumber: parseInt(numExtMatch[2], 10), isDownloading }
   }
 
   // 3. Pola WinRAR lawas: name.r00, name.r01
@@ -100,14 +100,14 @@ export async function GET(request) {
       }, { status: 400 })
     }
 
-    // Pemindaian rekursif terkontrol (maks depth 3)
+    // Pemindaian rekursif terkontrol (maks depth 6 agar mencakup Content/Paks Unreal Engine)
     const allFiles = []
     const allSubfolders = []
     let totalSize = 0
     let totalFileCount = 0
 
     function walkDir(currentDir, currentDepth = 1, relPrefix = '') {
-      if (currentDepth > 3) return
+      if (currentDepth > 6) return
       let entries = []
       try {
         entries = fs.readdirSync(currentDir, { withFileTypes: true })

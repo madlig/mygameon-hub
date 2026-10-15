@@ -55,6 +55,13 @@ export default function WorkbenchPage() {
 
   // ── Process Execution State ──
   const [processState, setProcessState] = useState({ status: 'idle', progress: 0, text: '', logs: [] })
+  const processStateRef = useRef(processState)
+  processStateRef.current = processState
+
+  const autoCleanupLocalRef = useRef(autoCleanupLocal)
+  autoCleanupLocalRef.current = autoCleanupLocal
+
+  const handleCleanPartsRef = useRef(null)
   const isUploading = processState?.status === 'processing' || processState?.status === 'uploading'
   useNavigationGuard(isUploading, 'Proses kompresi/upload ke Google Drive sedang berjalan. Tinggalkan halaman?')
 
@@ -71,11 +78,12 @@ export default function WorkbenchPage() {
         }
       }
 
-      // Existing Games di MongoDB GameCatalog
-      const catRes = await fetch('/api/search?q=')
+      // Existing Games di MongoDB GameCatalog (muat hingga 2000 game untuk matching update)
+      const catRes = await fetch('/api/search?q=&limit=2000')
       const catJson = await catRes.json()
-      if (catJson.games && Array.isArray(catJson.games)) {
-        setExistingGames(catJson.games)
+      const gamesList = catJson.results || catJson.games || []
+      if (Array.isArray(gamesList)) {
+        setExistingGames(gamesList)
       }
     } catch (err) {
       console.error('Failed to load workspaces/catalog:', err)
@@ -83,11 +91,20 @@ export default function WorkbenchPage() {
   }, [targetWorkspace])
 
   // ── 2. Handler Pilih Folder Game di PC ──
+  const autoMatchedFolderRef = useRef(null)
+
   const handleSelectFolder = useCallback((folder) => {
     setSelectedFolder(folder)
     if (!folder) return
     const cleaned = cleanReleaseName(folder.name)
     setCustomCatalogTitle(cleaned)
+
+    // Jika katalog sudah siap, catat bahwa folder ini telah dievaluasi
+    if (existingGames.length > 0) {
+      autoMatchedFolderRef.current = folder.path
+    } else {
+      autoMatchedFolderRef.current = null
+    }
 
     // Cek apakah game sudah pernah ada di katalog (Auto-match mode Update)
     const rawLower = folder.name.toLowerCase()
@@ -98,8 +115,9 @@ export default function WorkbenchPage() {
     if (match) {
       setSelectedGame(match)
       setUploadMode('update')
+      setCustomCatalogTitle(match.name || cleaned)
       setFileVersion(match.fileVersion || '')
-      const primaryOwner = match.ownerEmail?.split(',')[0]?.trim()
+      const primaryOwner = match.ownerEmail?.split(',')[0]?.trim() || match.workspaceEmail
       const matchedWs = workspaces.find((w) => w.email === primaryOwner)
       if (matchedWs) setTargetWorkspace(matchedWs)
     } else {
@@ -108,6 +126,33 @@ export default function WorkbenchPage() {
       setFileVersion('')
     }
   }, [existingGames, workspaces])
+
+  // Auto-detect match saat existingGames pertama kali termuat untuk folder yang sedang aktif
+  useEffect(() => {
+    if (!selectedFolder || existingGames.length === 0) return
+    // Jika folder ini sudah pernah dievaluasi atau user sudah menentukan pilihannya, jangan override!
+    if (autoMatchedFolderRef.current === selectedFolder.path) return
+
+    autoMatchedFolderRef.current = selectedFolder.path
+    const cleaned = cleanReleaseName(selectedFolder.name)
+    const rawLower = selectedFolder.name.toLowerCase()
+    const cleanLower = cleaned.toLowerCase()
+
+    const match = existingGames.find(
+      (g) => (g.name || g.title || '').toLowerCase() === rawLower || (g.name || g.title || '').toLowerCase() === cleanLower
+    )
+    if (match) {
+      setSelectedGame(match)
+      setUploadMode('update')
+      setCustomCatalogTitle(match.name || cleaned)
+      if (match.fileVersion) {
+        setFileVersion(match.fileVersion)
+      }
+      const primaryOwner = match.ownerEmail?.split(',')[0]?.trim() || match.workspaceEmail
+      const matchedWs = workspaces.find((w) => w.email === primaryOwner)
+      if (matchedWs) setTargetWorkspace(matchedWs)
+    }
+  }, [existingGames, selectedFolder, workspaces])
 
   const selectedFolderRef = useRef(selectedFolder)
   selectedFolderRef.current = selectedFolder
@@ -123,9 +168,19 @@ export default function WorkbenchPage() {
       }
       const json = await res.json()
       if (json.success) {
-        setData({ path: json.path || '', folders: json.folders || [] })
-        if (json.folders?.length > 0 && !selectedFolderRef.current) {
-          handleSelectFolder(json.folders[0])
+        const scannedFolders = json.folders || []
+        setData({ path: json.path || '', folders: scannedFolders })
+        if (scannedFolders.length > 0) {
+          if (!selectedFolderRef.current) {
+            handleSelectFolder(scannedFolders[0])
+          } else {
+            const updatedMatch = scannedFolders.find(
+              (f) => f.path === selectedFolderRef.current.path || f.name === selectedFolderRef.current.name
+            )
+            if (updatedMatch) {
+              setSelectedFolder(updatedMatch)
+            }
+          }
         }
       } else if (!silent) {
         toast(json.error || 'Gagal memindai folder lokal', 'error')
@@ -209,20 +264,27 @@ export default function WorkbenchPage() {
         const json = await res.json()
         const stateData = json.state || (json.status ? json : null)
         if (stateData) {
-          setProcessState((prev) => {
-            // Jika baru saja selesai sukses
-            if (stateData.status === 'success' && prev?.status === 'processing') {
+          const prevStatus = processStateRef.current?.status
+          setProcessState(stateData)
+
+          // Jika baru saja selesai sukses (transisi dari processing -> success)
+          if (stateData.status === 'success' && prevStatus === 'processing') {
+            const isArchiveJob = stateData.action === 'archive' && !stateData.driveFolderId
+            if (isArchiveJob) {
+              toast('Kompresi WinRAR selesai! File part siap diupload ke Google Drive.', 'success')
+              fetchScan(true)
+            } else {
               toast('Pekerjaan upload berhasil selesai!', 'success')
               fetchHistory()
-              fetchScan()
+              fetchScan(true)
+              fetchWorkspacesAndCatalog()
 
-              // Jika toggle autoCleanupLocal aktif
-              if (autoCleanupLocal && selectedFolder) {
-                handleCleanParts(selectedFolder, true)
+              // Jika toggle autoCleanupLocal aktif (hanya setelah upload ke Google Drive selesai)
+              if (autoCleanupLocalRef.current && selectedFolderRef.current) {
+                handleCleanPartsRef.current?.(selectedFolderRef.current, true)
               }
             }
-            return stateData
-          })
+          }
         }
       } catch (_) {}
     }
@@ -234,7 +296,7 @@ export default function WorkbenchPage() {
       timer = setInterval(checkStatus, 1500)
     }
     return () => clearInterval(timer)
-  }, [processState.status, isQueueRunning, autoCleanupLocal, selectedFolder, fetchHistory, fetchScan])
+  }, [processState.status, isQueueRunning, fetchHistory, fetchScan, fetchWorkspacesAndCatalog, toast])
 
   // ── Eksekusi Single Upload / Archive / Extract ──
   const startProcessing = async (action = 'upload', uploadOptions = {}) => {
@@ -259,6 +321,10 @@ export default function WorkbenchPage() {
           : 'upload ke Google Drive'
 
       const folderName = selectedFolder?.name || uploadOptions.gameName || ''
+      const mergedConfig = {
+        ...(uploadOptions.config || rarConfig),
+        autoCleanupLocal: uploadOptions.autoCleanupLocal ?? autoCleanupLocal,
+      }
       const res = await fetch('/api/studio/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -270,8 +336,10 @@ export default function WorkbenchPage() {
           mode: uploadOptions.mode || uploadMode,
           customTitle: uploadOptions.customTitle || customCatalogTitle || (folderName ? cleanReleaseName(folderName) : null),
           cleanReplace: uploadOptions.cleanReplace ?? cleanReplace,
-          config: uploadOptions.config || rarConfig,
+          config: mergedConfig,
+          autoCleanupLocal: uploadOptions.autoCleanupLocal ?? autoCleanupLocal,
           targetFolderId: uploadOptions.targetFolderId || null,
+          autoPropagate: uploadOptions.autoPropagate ?? true,
           resume: uploadOptions.resume ?? true,
           forceWipeExisting: uploadOptions.forceWipeExisting ?? false,
           selectedParts: uploadOptions.selectedParts || null,
@@ -281,7 +349,20 @@ export default function WorkbenchPage() {
       const json = await res.json()
       if (json.success) {
         toast(`Memulai proses ${actionName}...`, 'success')
-        setProcessState({ status: 'processing', progress: 0, text: `Memulai ${actionName}...`, logs: [] })
+        const initialPhase =
+          action === 'archive' ? 'archiving' : action === 'extract' ? 'extracting' : 'uploading'
+        setProcessState({
+          status: 'processing',
+          phase: initialPhase,
+          action,
+          gameName: folderName,
+          folderPath: targetPath,
+          targetEmail: emailToUse || '',
+          progress: 0,
+          overallProgress: 0,
+          text: `Memulai ${actionName}...`,
+          logs: [],
+        })
       } else {
         toast(json.error || 'Gagal memulai pekerjaan', 'error')
       }
@@ -356,6 +437,8 @@ export default function WorkbenchPage() {
           resume: nextItem.resume ?? true,
           forceWipeExisting: nextItem.forceWipeExisting ?? false,
           selectedParts: nextItem.selectedParts || null,
+          fileVersion: nextItem.fileVersion || '',
+          autoPropagate: nextItem.autoPropagate ?? true,
         }),
       })
       const json = await res.json()
@@ -487,7 +570,7 @@ export default function WorkbenchPage() {
     const res = await fetch('/api/studio/local-games', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folderName: name, stagingPath: data.path }),
+      body: JSON.stringify({ action: 'create_folder', folderName: name, stagingPath: data.path }),
     })
     const json = await res.json()
     if (json.success) {
@@ -500,9 +583,14 @@ export default function WorkbenchPage() {
 
   const handleRenameFolder = async (folder, newName) => {
     const res = await fetch('/api/studio/local-games', {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldPath: folder.path, newName, stagingPath: data.path }),
+      body: JSON.stringify({
+        oldName: folder.name,
+        oldPath: folder.path,
+        newName,
+        stagingPath: data.path,
+      }),
     })
     const json = await res.json()
     if (json.success) {
@@ -515,9 +603,9 @@ export default function WorkbenchPage() {
 
   const handleUpdateStagingPath = async (newPath) => {
     const res = await fetch('/api/studio/local-games', {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stagingPath: newPath }),
+      body: JSON.stringify({ action: 'set_staging_path', newStagingPath: newPath }),
     })
     const json = await res.json()
     if (json.success) {
@@ -615,6 +703,7 @@ export default function WorkbenchPage() {
       })
     }
   }
+  handleCleanPartsRef.current = handleCleanParts
 
   return (
     <div className="space-y-5 pb-12">

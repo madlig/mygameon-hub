@@ -69,9 +69,12 @@ export default function WorkbenchView({
   const mobileTab = userMobileTab ?? (isProcessing ? 'cockpit' : 'folders')
   const setMobileTab = setUserMobileTab
 
+  const selectedFolderPath = selectedFolder?.path
+  const selectedFolderName = selectedFolder?.name
+
   // Fetch file & subfolder inspection
   const fetchFolderContent = useCallback(async () => {
-    if (!selectedFolder?.path && !selectedFolder?.name) {
+    if (!selectedFolderPath && !selectedFolderName) {
       setInspectData(null)
       return
     }
@@ -80,8 +83,8 @@ export default function WorkbenchView({
 
     try {
       const params = new URLSearchParams()
-      if (selectedFolder.path) params.set('path', selectedFolder.path)
-      if (selectedFolder.name) params.set('folderName', selectedFolder.name)
+      if (selectedFolderPath) params.set('path', selectedFolderPath)
+      if (selectedFolderName) params.set('folderName', selectedFolderName)
       params.set('type', 'upload')
 
       const res = await fetch(`/api/system/inspect-folder?${params.toString()}`)
@@ -97,13 +100,22 @@ export default function WorkbenchView({
     } finally {
       setInspectLoading(false)
     }
-  }, [selectedFolder])
+  }, [selectedFolderPath, selectedFolderName])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchFolderContent()
     setCustomTargetFolderId('')
     setSelectedPartNames([])
   }, [fetchFolderContent])
+
+  // Auto-refresh inspeksi berkas ketika proses kompresi / upload selesai
+  useEffect(() => {
+    if (processState?.status === 'success') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchFolderContent()
+    }
+  }, [processState?.status, fetchFolderContent])
 
   // Pengecekan Target Google Drive untuk Mendeteksi File yang Sudah Ada (Resume Detection)
   const checkTargetDrive = useCallback(async () => {
@@ -115,7 +127,7 @@ export default function WorkbenchView({
     setIsCheckingDrive(true)
     try {
       const files = inspectData?.files || []
-      const rarParts = files.filter((f) => /\.(rar|7z|zip|part\d+\.rar)$/i.test(f.name))
+      const rarParts = files.filter((f) => f.category === 'rar_part' || f.isPart)
       const partsList = rarParts.map((f) => ({ name: f.name, size: f.size || 0 }))
       const folderName = customCatalogTitle || cleanReleaseName(selectedFolder.name)
 
@@ -155,7 +167,10 @@ export default function WorkbenchView({
   const handleArchiveFolder = async () => {
     if (!selectedFolder) return
     try {
-      await startProcessing?.('archive', { config: rarConfig })
+      const pureSize = selectedFolder?.folderSize || selectedFolder?.size || inspectData?.folder?.totalSize || 0
+      await startProcessing?.('archive', {
+        config: { ...rarConfig, totalSize: pureSize },
+      })
     } catch (err) {
       toast(err.message, 'error')
     }
@@ -164,19 +179,37 @@ export default function WorkbenchView({
   // Aksi Mulai Upload ke Google Drive
   const handleStartUpload = () => {
     if (!selectedFolder) return
-    const isResume = resumeMode && driveCheck?.exists && driveCheck?.uploadedCount > 0
+    const isUpdate = uploadMode === 'update'
+    const shouldCleanReplace = isUpdate ? cleanReplace : (!resumeMode && driveCheck?.exists)
+    const isResume = !isUpdate && resumeMode && driveCheck?.exists && driveCheck?.uploadedCount > 0
+
+    const targetFolderId = isUpdate
+      ? (selectedGame?.folderId || selectedGame?.targetId || driveCheck?.folderId || customTargetFolderId?.trim() || null)
+      : (isResume ? (driveCheck?.folderId || customTargetFolderId?.trim() || null) : (customTargetFolderId?.trim() || null))
+
+    const pureSize = selectedFolder?.folderSize || selectedFolder?.size || inspectData?.folder?.totalSize || 0
+
     startProcessing?.('upload', {
-      targetFolderId: driveCheck?.folderId || customTargetFolderId?.trim() || selectedGame?.folderId || null,
+      mode: uploadMode,
+      targetFolderId,
       resume: isResume,
-      cleanReplace: !resumeMode && driveCheck?.exists,
-      forceWipeExisting: !resumeMode && driveCheck?.exists,
+      cleanReplace: shouldCleanReplace,
+      forceWipeExisting: shouldCleanReplace,
       selectedParts: selectedPartNames && selectedPartNames.length > 0 ? selectedPartNames : null,
       fileVersion: fileVersion,
+      customTitle: customCatalogTitle || selectedGame?.name || cleanReleaseName(selectedFolder.name),
+      autoPropagate: true,
+      config: { ...rarConfig, totalSize: pureSize },
     })
   }
 
-  // Aksi Melanjutkan Upload yang Terputus / Error
+  // Aksi Melanjutkan Upload / Kompresi yang Terputus / Error
   const handleResumeUpload = () => {
+    if (processState?.action === 'archive' || processState?.phase === 'archiving') {
+      handleArchiveFolder()
+      return
+    }
+
     const targetPath =
       selectedFolder?.path ||
       processState?.folderPath ||
@@ -358,7 +391,9 @@ export default function WorkbenchView({
               fileVersion={fileVersion}
               onProceedToUpload={() => {
                 onResetProcessState?.()
+                onScan?.(true)
                 fetchFolderContent?.()
+                checkTargetDrive?.()
               }}
             />
           )}
@@ -402,14 +437,24 @@ export default function WorkbenchView({
             setSelectedPartNames={setSelectedPartNames}
             onStartUpload={handleStartUpload}
             onAddToQueue={() => {
-              const isResume = resumeMode && driveCheck?.exists && driveCheck?.uploadedCount > 0
+              const isUpdate = uploadMode === 'update'
+              const shouldCleanReplace = isUpdate ? cleanReplace : (!resumeMode && driveCheck?.exists)
+              const isResume = !isUpdate && resumeMode && driveCheck?.exists && driveCheck?.uploadedCount > 0
+              const targetFolderId = isUpdate
+                ? (selectedGame?.folderId || selectedGame?.targetId || driveCheck?.folderId || customTargetFolderId?.trim() || null)
+                : (isResume ? (driveCheck?.folderId || customTargetFolderId?.trim() || null) : (customTargetFolderId?.trim() || null))
+
               onAddToQueue?.({
-                targetFolderId: driveCheck?.folderId || customTargetFolderId?.trim() || selectedGame?.folderId || null,
+                mode: uploadMode,
+                targetFolderId,
                 resume: isResume,
-                cleanReplace: !resumeMode && driveCheck?.exists,
+                cleanReplace: shouldCleanReplace,
+                forceWipeExisting: shouldCleanReplace,
                 remainingCount: isResume ? (selectedPartNames?.length || driveCheck.remainingCount) : null,
                 selectedParts: selectedPartNames && selectedPartNames.length > 0 ? selectedPartNames : null,
                 fileVersion: fileVersion,
+                customTitle: customCatalogTitle || selectedGame?.name || cleanReleaseName(selectedFolder.name),
+                autoPropagate: true,
               })
             }}
             onArchive={handleArchiveFolder}

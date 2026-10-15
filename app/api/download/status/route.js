@@ -141,21 +141,10 @@ export async function GET() {
         .filter(Boolean)
     )
 
-    const extractingPackageNames = new Set(
-      (extractions || [])
-        .filter((e) => e.status === 'extracting')
-        .flatMap((e) => [
-          (e.packageName || '').toLowerCase().trim(),
-          e.folderPath ? path.basename(e.folderPath).toLowerCase().trim() : ''
-        ])
-        .filter(Boolean)
-    )
-
     const filteredReady = (data.readyItems || []).filter((item) => {
       const name = (item.folderName || '').toLowerCase().trim()
       const title = (item.cleanTitle || '').toLowerCase().trim()
       if (incompletePackageNames.has(name) || incompletePackageNames.has(title)) return false
-      if (extractingPackageNames.has(name) || extractingPackageNames.has(title)) return false
       return true
     })
 
@@ -167,12 +156,21 @@ export async function GET() {
         (t.packageName && item.cleanTitle && t.packageName.toLowerCase() === item.cleanTitle.toLowerCase()) ||
         (t.customDir && path.basename(t.customDir).toLowerCase() === item.folderName.toLowerCase())
       )
-      if (match?.password) {
-        item.password = match.password
-      } else if (item.folderName?.toLowerCase().includes('ova') || item.cleanTitle?.toLowerCase().includes('ova')) {
-        item.password = 'www.ovagames.com'
+      const matchedPwd = match?.password && !/^filecrypt\.cc$/i.test(String(match.password).trim())
+        ? String(match.password).trim()
+        : ''
+
+      if (
+        item.hasOvaArchive ||
+        item.folderName?.toLowerCase().includes('ova') ||
+        item.cleanTitle?.toLowerCase().includes('ova') ||
+        (match?.filename && /^og\d+-/i.test(match.filename))
+      ) {
+        item.password = matchedPwd || 'www.ovagames.com'
+      } else if (matchedPwd) {
+        item.password = matchedPwd
       } else {
-        item.password = 'mygameon'
+        item.password = 'www.ovagames.com'
       }
     }
 

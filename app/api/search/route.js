@@ -40,6 +40,7 @@ export async function GET(request) {
           name: { $first: "$name" },
           totalSize: { $max: "$totalSize" },
           fileCount: { $max: "$fileCount" },
+          fileVersion: { $first: "$fileVersion" },
           sources: { $push: { folderId: "$folderId", ownerEmail: "$ownerEmail", sendCount: { $ifNull: ["$sendCount", 0] } } }
         }
       },
@@ -57,7 +58,10 @@ export async function GET(request) {
       return {
         id: primaryFolderId || g.name,
         targetId: primaryFolderId,
+        folderId: primaryFolderId,
         name: g.name,
+        fileVersion: g.fileVersion || '',
+        totalBytes: g.totalSize || 0,
         size: fmtSize(g.totalSize),
         totalFiles: g.fileCount || 0,
         mimeType: 'application/vnd.google-apps.folder',
@@ -68,7 +72,7 @@ export async function GET(request) {
       }
     })
 
-    return NextResponse.json({ results, page, hasMore: results.length === limit })
+    return NextResponse.json({ results, games: results, page, hasMore: results.length === limit })
 
   } catch (err) {
     if (err.message === 'Unauthorized') {
