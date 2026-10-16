@@ -30,6 +30,7 @@ export default function ShopeeListingStudio() {
   const [screenshots, setScreenshots] = useState([])
   const [customOutputDir, setCustomOutputDir] = useState('D:\\Shopee\\3-listing_output')
   const fileInputRef = useRef(null)
+  const screenshotsInputRef = useRef(null)
 
   // Generation state
   const [generateState, setGenerateState] = useState({ status: 'idle', result: null, error: null })
@@ -329,6 +330,89 @@ export default function ShopeeListingStudio() {
     }
   }
 
+  // 📸 Handler unggah multiple screenshot gameplay dari komputer (1-4 file)
+  function handleScreenshotsSelect(e) {
+    const files = Array.from(e.target.files || []).slice(0, 4)
+    if (files.length === 0) return
+    const newShots = []
+    let loaded = 0
+    files.forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        newShots.push(event.target.result)
+        loaded++
+        if (loaded === files.length) {
+          setScreenshots(newShots)
+          toast(`${newShots.length} screenshot gameplay berhasil dimuat!`, 'success')
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  // 🛠️ Mode Manual: Untuk game non-Steam, porting konsol (PS/Nintendo), atau repack emulator
+  function handleCreateManualListing(customTitle) {
+    const defaultTitle = customTitle || query || 'Game Baru'
+    const cleanTitle = defaultTitle.replace(/[-_.]/g, ' ').trim()
+    const primaryGenre = 'Action Adventure'
+    const defaultSynopsis = `Nikmati keseruan bermain ${cleanTitle} dengan grafis memukau dan aksi legendaris yang kini dapat dimainkan lancar di PC.`
+    const defaultSeoTitle = `GAME PC - ${cleanTitle.toUpperCase()} - FULL VERSION Download Extract Langsung Main`
+    const defaultSpecs = [
+      'SPESIFIKASI MINIMUM (PC / EMULATOR):',
+      '• OS: Windows 10 / 11 64-bit',
+      '• Processor: Intel Core i5 / AMD Ryzen 5',
+      '• RAM: 16 GB',
+      '• Graphics: NVIDIA GeForce GTX 1060 / AMD Radeon RX 580 (4GB+ VRAM)',
+      '• Storage: Ruang kosong mencukupi'
+    ].join('\n')
+
+    const defaultDesc = [
+      'HARAP DIBACA SEBELUM MEMESAN:',
+      '• Pengiriman file cepat dan aman melalui GDrive (server stabil full speed, bukan akun sharing).',
+      '• Format file RAR rapi dan anti-corrupt, ekstrak langsung main.',
+      '• SUDAH DISERTAKAN VIDEO TUTORIAL cara download, ekstrak, dan panduan main langkah-demi-langkah.',
+      '• Bebas dimainkan offline selamanya tanpa batas waktu.',
+      '',
+      'RINGKASAN GAME:',
+      defaultSynopsis,
+      '',
+      defaultSpecs,
+      '',
+      'PENGIRIMAN & KETENTUAN BONUS:',
+      '• Cantumkan alamat email aktif di Catatan Pesanan saat checkout atau kirimkan di Chat Shopee.',
+      '• Akses link dikirim kilat dalam waktu 5–15 menit di jam operasional toko.',
+      '• Garansi file dan link aktif sampai game berhasil dimainkan.'
+    ].join('\n')
+
+    setSearchState({
+      status: 'success',
+      data: {
+        appId: null,
+        title: cleanTitle,
+        originalName: cleanTitle,
+        coverUrl: '',
+        coverFound: false,
+        screenshots: [],
+        genres: ['Action', 'Adventure', 'Console Port'],
+        primaryGenre,
+        synopsis: defaultSynopsis,
+        specsText: defaultSpecs,
+        seoTitle: defaultSeoTitle,
+        description: defaultDesc,
+        isNonSteam: true,
+        source: 'Manual Custom (Non-Steam / Emulator)'
+      },
+      error: null
+    })
+
+    setTitle(cleanTitle)
+    setSeoTitle(defaultSeoTitle)
+    setDescription(defaultDesc)
+    setCoverUrl('')
+    setScreenshots([])
+    toast(`Formulir manual dibuka untuk "${cleanTitle}". Silakan atur cover & screenshot.`, 'success')
+  }
+
   function handleReset() {
     setQuery('')
     setSearchState({ status: 'idle', data: null, error: null })
@@ -462,14 +546,27 @@ export default function ShopeeListingStudio() {
           </button>
         </form>
 
-        {/* Error Alert */}
+        {/* Error Alert with Manual Listing Option */}
         {searchState.status === 'error' && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-center text-red-400 mb-8 max-w-3xl mx-auto w-full flex items-center justify-center gap-3">
-            <AlertCircle size={20} />
-            <div className="text-left text-xs">
-              <span className="font-bold block">Pencarian Gagal</span>
-              <span>{searchState.error}</span>
+          <div className="bg-[var(--surface)] border border-amber-500/30 rounded-2xl p-5 mb-8 max-w-3xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg">
+            <div className="flex items-start gap-3 text-left">
+              <AlertCircle size={22} className="text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-xs">
+                <span className="font-bold text-amber-300 block mb-0.5">Game Tidak Ditemukan di Database Online</span>
+                <span className="text-[var(--text-3)] leading-relaxed">{searchState.error}</span>
+                <p className="text-[11px] text-[var(--text-4)] mt-1">
+                  Game porting konsol (PlayStation / Nintendo / Emulator) dapat dibuatkan 6 slide Shopee secara manual.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => handleCreateManualListing(query)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs shadow transition-all cursor-pointer shrink-0"
+            >
+              <Sparkles size={14} />
+              <span>Buat Listing Manual</span>
+            </button>
           </div>
         )}
 
@@ -482,13 +579,20 @@ export default function ShopeeListingStudio() {
               
               {/* Cover Card */}
               <div className="bg-[var(--surface)] border border-[var(--border-strong)] rounded-2xl p-5 shadow-lg">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
                     <ImageIcon size={14} className="text-[var(--primary)]" /> Cover Portrait (600x900)
                   </span>
-                  <span className="text-[10px] bg-[var(--primary)]/10 text-[var(--primary)] px-2 py-0.5 rounded font-bold">
-                    {searchState.data.primaryGenre}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {searchState.data.isNonSteam && (
+                      <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded font-bold">
+                        {searchState.data.source || 'Non-Steam / Emulator'}
+                      </span>
+                    )}
+                    <span className="text-[10px] bg-[var(--primary)]/10 text-[var(--primary)] px-2 py-0.5 rounded font-bold">
+                      {searchState.data.primaryGenre}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="aspect-[2/3] w-full max-w-[280px] mx-auto bg-black/40 rounded-xl overflow-hidden border border-white/10 shadow-inner relative group" onPaste={handlePasteCover}>
@@ -604,19 +708,50 @@ export default function ShopeeListingStudio() {
                   <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-3)] flex items-center gap-1.5">
                     <Layers size={14} className="text-[var(--primary)]" /> 4 Screenshot Gameplay
                   </span>
-                  <span className="text-[10px] text-[var(--text-4)]">Untuk Slide 2 Kolase</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => screenshotsInputRef.current?.click()}
+                      className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                      title="Upload 1-4 file screenshot dari komputer"
+                    >
+                      <Upload size={10} /> Upload Screenshot
+                    </button>
+                    <span className="text-[10px] text-[var(--text-4)]">Slide 2 Kolase</span>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  {screenshots.slice(0, 4).map((shot, idx) => (
-                    <div key={idx} className="aspect-video bg-black/40 rounded-lg overflow-hidden border border-white/5 relative">
-                      <img src={shot} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-1 right-1 text-[9px] bg-black/70 text-white/80 px-1 rounded font-mono">
-                        #{idx + 1}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                {/* Hidden input for screenshots */}
+                <input
+                  type="file"
+                  ref={screenshotsInputRef}
+                  multiple
+                  onChange={handleScreenshotsSelect}
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                />
+
+                {screenshots.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {screenshots.slice(0, 4).map((shot, idx) => (
+                      <div key={idx} className="aspect-video bg-black/40 rounded-lg overflow-hidden border border-white/5 relative">
+                        <img src={shot} alt={`Screenshot ${idx + 1}`} className="w-full h-full object-cover" />
+                        <span className="absolute bottom-1 right-1 text-[9px] bg-black/70 text-white/80 px-1 rounded font-mono">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => screenshotsInputRef.current?.click()}
+                    className="aspect-[16/9] border border-dashed border-[var(--border-soft)] hover:border-amber-400/50 rounded-xl flex flex-col items-center justify-center p-4 text-center cursor-pointer transition-colors bg-white/5 hover:bg-white/10"
+                  >
+                    <Upload size={20} className="text-[var(--text-4)] mb-2" />
+                    <p className="text-xs font-semibold text-[var(--text-3)]">Belum ada screenshot gameplay</p>
+                    <p className="text-[10px] text-[var(--text-4)] mt-1">Klik di sini untuk memilih 1-4 gambar screenshot dari komputer</p>
+                  </div>
+                )}
               </div>
 
               {/* Output Directory Info */}

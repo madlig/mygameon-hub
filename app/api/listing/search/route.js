@@ -127,9 +127,84 @@ export async function GET(request) {
     }
 
     if (!appId) {
+      // ── Fallback: Cari di RAWG Database (Untuk Game Konsol / Porting PC / Emulator seperti God of War 3, Bloodborne, dll) ──
+      try {
+        const rawgUrl = `https://api.rawg.io/api/games?search=${encodeURIComponent(cleanQuery)}&key=c542e67aec3a4340908f9de9e86038af&page_size=5`
+        const rawgRes = await fetch(rawgUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            Accept: 'application/json'
+          }
+        })
+        const rawgData = await rawgRes.json()
+
+        if (rawgData && rawgData.results && rawgData.results.length > 0) {
+          const matched = rawgData.results[0]
+          const cleanTitle = cleanGameTitle(matched.name || cleanQuery)
+          const genres = (matched.genres || []).map(g => g.name)
+          const primaryGenre = genres[0] || 'Action Adventure'
+          
+          // Ambil maksimal 4 screenshot gameplay dari short_screenshots
+          const screenshots = (matched.short_screenshots || [])
+            .slice(1, 5)
+            .map(s => s.image)
+            .filter(Boolean)
+
+          // Fallback jika short_screenshots sedikit
+          if (screenshots.length === 0 && matched.background_image) {
+            screenshots.push(matched.background_image)
+          }
+
+          const synopsis = `Rasakan pengalaman epik bermain ${cleanTitle} dengan visual memukau dan aksi seru yang kini dapat dinikmati di PC.`
+          const seoTitle = buildSeoTitle(cleanTitle, primaryGenre)
+
+          const specsText = [
+            'SPESIFIKASI MINIMUM (PC / EMULATOR):',
+            '• OS: Windows 10 / 11 64-bit',
+            '• Processor: Intel Core i5 / AMD Ryzen 5',
+            '• RAM: 16 GB',
+            '• Graphics: NVIDIA GeForce GTX 1060 / AMD Radeon RX 580 (4GB+ VRAM)',
+            '• Storage: Ruang kosong mencukupi'
+          ].join('\n')
+
+          const fullDescription = [
+            SAFE_HEADER,
+            '',
+            'RINGKASAN GAME:',
+            synopsis,
+            '',
+            specsText,
+            '',
+            SAFE_FOOTER
+          ].join('\n')
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              appId: null,
+              title: cleanTitle,
+              originalName: matched.name,
+              coverUrl: '',
+              coverFound: false,
+              screenshots,
+              genres,
+              primaryGenre,
+              synopsis,
+              specsText,
+              seoTitle,
+              description: fullDescription,
+              isNonSteam: true,
+              source: 'RAWG Database (Porting Konsol / Emulator)'
+            }
+          })
+        }
+      } catch (rawgErr) {
+        console.warn('RAWG fallback search error:', rawgErr.message)
+      }
+
       return NextResponse.json({ 
         success: false, 
-        error: `Game "${cleanQuery}" tidak ditemukan di database Steam. Silakan coba masukkan Steam AppID atau link toko Steam.` 
+        error: `Game "${cleanQuery}" tidak ditemukan di database Steam atau RAWG. Anda dapat membuatnya secara manual.` 
       }, { status: 404 })
     }
 

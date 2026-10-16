@@ -6,8 +6,9 @@ import { useSession } from 'next-auth/react'
 import { useEffect, useState } from 'react'
 import {
   Clock, Users, Gamepad2, Grid2X2,
-  Sparkles, AlertCircle, Cloud, DownloadCloud, RefreshCw, Folder, ShoppingCart, CheckCircle2
+  Sparkles, AlertCircle, Cloud, DownloadCloud, RefreshCw, Folder, ShoppingCart, CheckCircle2, Info
 } from 'lucide-react'
+import ChangelogModal from '@/components/shared/ChangelogModal'
 
 const navGroups = [
   {
@@ -42,6 +43,7 @@ export default function Sidebar() {
   const [updateStatus, setUpdateStatus] = useState(null) // 'checking', 'downloading', 'ready', 'error', 'latest'
   const [updateProgress, setUpdateProgress] = useState(0)
   const [appVersion, setAppVersion] = useState('')
+  const [changelogOpen, setChangelogOpen] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
@@ -200,7 +202,15 @@ export default function Sidebar() {
               <span className="font-medium text-[var(--text-3)] truncate">Cloud Normal</span>
             </div>
             {appVersion && (
-              <span className="text-xs font-mono text-[var(--text-4)]">v{appVersion}</span>
+              <button
+                type="button"
+                onClick={() => setChangelogOpen(true)}
+                className="text-xs font-mono text-[var(--text-4)] hover:text-purple-300 hover:underline transition-colors cursor-pointer flex items-center gap-1"
+                title="Klik untuk melihat Catatan Pembaruan & Riwayat Rilis (Changelog)"
+              >
+                <span>v{appVersion}</span>
+                <Info size={11} className="text-[var(--text-4)] hover:text-purple-300" />
+              </button>
             )}
           </div>
         )}
@@ -209,14 +219,23 @@ export default function Sidebar() {
         {isClient && window.electronAPI && (
           <div>
             {updateReady ? (
-              <button
-                type="button"
-                onClick={() => window.electronAPI?.quitAndInstall()}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/20 px-3 py-2.5 text-xs font-bold text-purple-300 hover:bg-purple-500/30 transition-all cursor-pointer shadow-[0_0_15px_rgba(168,85,247,0.25)] animate-pulse"
-              >
-                <span className="h-2 w-2 rounded-full bg-purple-400" />
-                <span>Restart & Install Update!</span>
-              </button>
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => window.electronAPI?.quitAndInstall()}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/20 px-3 py-2.5 text-xs font-bold text-purple-300 hover:bg-purple-500/30 transition-all cursor-pointer shadow-[0_0_15px_rgba(168,85,247,0.25)] animate-pulse"
+                >
+                  <span className="h-2 w-2 rounded-full bg-purple-400" />
+                  <span>Restart & Install Update!</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChangelogOpen(true)}
+                  className="w-full text-center text-[10px] text-purple-300/80 hover:text-purple-200 hover:underline transition-colors cursor-pointer"
+                >
+                  Lihat Catatan Rilis
+                </button>
+              </div>
             ) : updateStatus === 'downloading' ? (
               <div className="w-full flex items-center justify-center gap-2 rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-400">
                 <RefreshCw size={13} className="animate-spin text-blue-400" />
@@ -255,6 +274,12 @@ export default function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* Modal Riwayat Pembaruan & Changelog */}
+      <ChangelogModal 
+        isOpen={changelogOpen} 
+        onClose={() => setChangelogOpen(false)} 
+      />
     </aside>
   )
 }

@@ -53,17 +53,49 @@ if (commandArgs.length === 0) {
   console.log('\x1b[33m%s\x1b[0m', '⚠️ GH_TOKEN tidak ditemukan di .env.local, environment, atau gh CLI. Build berjalan tanpa Auto Publish.');
 }
 
+// Helper untuk mengekstrak catatan rilis dari CHANGELOG.md untuk tag tertentu
+function getReleaseNotesForTag(tag) {
+  try {
+    const changelogPath = path.join(__dirname, '..', 'CHANGELOG.md');
+    if (!fs.existsSync(changelogPath)) return `Rilis MyGameON Studio ${tag}`;
+    const content = fs.readFileSync(changelogPath, 'utf-8');
+    const escapedTag = tag.replace(/^v/, '');
+    const regex = new RegExp(`##\\s*\\[v?${escapedTag}\\][\\s\\S]*?(?=(?:\\n##\\s*\\[|\\Z))`, 'i');
+    const match = content.match(regex);
+    if (match && match[0].trim()) {
+      return match[0].replace(/\n---\s*$/, '').trim();
+    }
+  } catch (err) {
+    console.warn('Gagal membaca CHANGELOG.md:', err.message);
+  }
+  return `Rilis MyGameON Studio ${tag}`;
+}
+
 // Pastikan rilis GitHub sudah ada sebelum electron-builder dijalankan agar tidak terjadi race-condition (422 already_exists) saat upload paralel
 if (commandArgs.includes('--publish')) {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
     const currentTag = 'v' + pkg.version;
     const { execSync } = require('child_process');
+    const notesContent = getReleaseNotesForTag(currentTag);
+    const tempNotesPath = path.join(__dirname, '..', '.temp-release-notes.md');
+
     try {
       execSync(`gh release view ${currentTag}`, { env, stdio: 'ignore' });
+      // Jika rilis sudah ada, perbarui catatannya agar selalu sinkron dengan CHANGELOG.md
+      fs.writeFileSync(tempNotesPath, notesContent, 'utf-8');
+      try {
+        execSync(`gh release edit ${currentTag} --notes-file "${tempNotesPath}"`, { env, stdio: 'ignore' });
+      } catch (_) {}
+      try { fs.unlinkSync(tempNotesPath); } catch (_) {}
     } catch (_) {
-      console.log(`Membuat rilis GitHub awal untuk ${currentTag}...`);
-      execSync(`gh release create ${currentTag} --title "${pkg.version}" --draft=false --notes "Rilis MyGameON Studio ${currentTag}"`, { env, stdio: 'ignore' });
+      console.log(`Membuat rilis GitHub awal untuk ${currentTag} beserta release notes...`);
+      fs.writeFileSync(tempNotesPath, notesContent, 'utf-8');
+      try {
+        execSync(`gh release create ${currentTag} --title "${pkg.version}" --draft=false --notes-file "${tempNotesPath}"`, { env, stdio: 'inherit' });
+      } finally {
+        try { fs.unlinkSync(tempNotesPath); } catch (_) {}
+      }
     }
   } catch (_) {}
 }
